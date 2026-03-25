@@ -8,7 +8,16 @@ const {
   SlashCommandBuilder,
   PermissionFlagsBits
 } = require('discord.js');
-const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
+const {
+  joinVoiceChannel,
+  getVoiceConnection,
+  createAudioPlayer,
+  createAudioResource,
+  NoSubscriberBehavior,
+  entersState,
+  VoiceConnectionStatus,
+  StreamType
+} = require('@discordjs/voice');
 
 const client = new Client({
   intents: [
@@ -16,6 +25,7 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates
   ]
 });
+
 const adhkar = [
   'سبحان الله',
   'الحمد لله',
@@ -24,56 +34,15 @@ const adhkar = [
   'سبحان الله وبحمده',
   'سبحان الله العظيم',
   'أستغفر الله',
-  'أستغفر الله العظيم وأتوب إليه',
   'لا حول ولا قوة إلا بالله',
   'اللهم صل وسلم على نبينا محمد',
   'حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم',
   'اللهم اغفر لي ولوالدي وللمؤمنين والمؤمنات',
-  'اللهم إنك عفو تحب العفو فاعفُ عني',
-  'اللهم آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار',
-  'اللهم إني أسألك الجنة وأعوذ بك من النار',
-  'اللهم أصلح لي ديني الذي هو عصمة أمري',
-  'اللهم اجعل القرآن ربيع قلبي ونور صدري',
-  'اللهم إني أعوذ بك من الهم والحزن',
-  'اللهم إني أعوذ بك من العجز والكسل',
-  'اللهم إني أعوذ بك من الجبن والبخل',
-  'اللهم إني أعوذ بك من غلبة الدين وقهر الرجال',
-  'اللهم إني أعوذ بك من زوال نعمتك',
-  'اللهم إني أعوذ بك من فجأة نقمتك',
-  'اللهم إني أعوذ بك من جميع سخطك',
-  'اللهم إني أسألك العفو والعافية',
-  'اللهم إني أسألك العافية في الدنيا والآخرة',
-  'اللهم اهدني وسددني',
-  'اللهم ثبت قلبي على دينك',
-  'اللهم يا مقلب القلوب ثبت قلبي على طاعتك',
-  'اللهم ارزقني حسن الخاتمة',
-  'اللهم اجعلني من التوابين',
-  'اللهم اجعلني من المتطهرين',
-  'اللهم ارزقني الإخلاص في القول والعمل',
-  'اللهم تقبل مني إنك أنت السميع العليم',
-  'اللهم اغفر ذنبي كله دقه وجله',
-  'اللهم اغفر لي ما قدمت وما أخرت',
-  'اللهم اغفر لي ما أسررت وما أعلنت',
-  'اللهم اغفر لي ما أنت أعلم به مني',
-  'اللهم إني ظلمت نفسي ظلماً كثيراً',
-  'فاغفر لي فإنه لا يغفر الذنوب إلا أنت',
-  'رب اغفر لي ولوالدي',
-  'رب ارحمهما كما ربياني صغيراً',
-  'رب اجعلني مقيم الصلاة ومن ذريتي',
-  'ربنا تقبل منا إنك أنت السميع العليم',
-  'ربنا لا تزغ قلوبنا بعد إذ هديتنا',
-  'ربنا آتنا من لدنك رحمة',
-  'ربنا هب لنا من أزواجنا وذرياتنا قرة أعين',
-  'واجعلنا للمتقين إماماً',
-  'اللهم اجعلنا من أهل الجنة',
-  'اللهم جنبنا النار',
-  'اللهم إنا نعوذ بك من عذاب القبر',
-  'اللهم إنا نعوذ بك من عذاب النار',
-  'اللهم إنا نعوذ بك من فتنة المحيا والممات',
-  'اللهم إنا نعوذ بك من فتنة المسيح الدجال',
-  'اللهم ارزقنا الفردوس الأعلى',
-  'اللهم اسقنا من يد نبيك شربة لا نظمأ بعدها أبداً'
+  'اللهم إنك عفو تحب العفو فاعفُ عني'
 ];
+
+// رابط قرآن مباشر
+const QURAN_URL = 'https://download.quranicaudio.com/qdc/mishari_al_afasy/murattal/001.mp3';
 
 function randomZekr() {
   return adhkar[Math.floor(Math.random() * adhkar.length)];
@@ -105,6 +74,14 @@ const commands = [
   new SlashCommandBuilder()
     .setName('leave')
     .setDescription('يخرج البوت من الروم الصوتي'),
+
+  new SlashCommandBuilder()
+    .setName('quran')
+    .setDescription('يشغل القرآن في الروم الصوتي'),
+
+  new SlashCommandBuilder()
+    .setName('stopquran')
+    .setDescription('يوقف تشغيل القرآن'),
 
   new SlashCommandBuilder()
     .setName('ban')
@@ -162,7 +139,6 @@ const commands = [
 async function registerSlashCommands() {
   try {
     console.log('⏳ جاري تسجيل أوامر السلاش...');
-
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
     await rest.put(
@@ -179,16 +155,51 @@ async function registerSlashCommands() {
   }
 }
 
+const players = new Map();
+
+function getOrCreatePlayer(guildId) {
+  if (!players.has(guildId)) {
+    const player = createAudioPlayer({
+      behaviors: {
+        noSubscriber: NoSubscriberBehavior.Pause
+      }
+    });
+
+    player.on('error', (error) => {
+      console.error('❌ خطأ في مشغل الصوت:', error.message);
+    });
+
+    players.set(guildId, player);
+  }
+
+  return players.get(guildId);
+}
+
+async function connectToVoice(interaction) {
+  const channel = interaction.member.voice.channel;
+
+  if (!channel) {
+    throw new Error('VOICE_REQUIRED');
+  }
+
+  const connection = joinVoiceChannel({
+    channelId: channel.id,
+    guildId: interaction.guild.id,
+    adapterCreator: interaction.guild.voiceAdapterCreator
+  });
+
+  await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+  return connection;
+}
+
 client.once('ready', async () => {
   console.log(`🔥 Logged in as ${client.user.tag}`);
-
   await registerSlashCommands();
 
   setInterval(async () => {
     try {
       const channel = await client.channels.fetch(process.env.AZKAR_CHANNEL_ID);
       if (!channel) return;
-
       await channel.send({ embeds: [createZekrEmbed()] });
     } catch (error) {
       console.error('❌ خطأ في إرسال الذكر:', error);
@@ -204,36 +215,66 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.commandName === 'join') {
-    const channel = interaction.member.voice.channel;
-
-    if (!channel) {
-      return interaction.reply({
-        content: '❌ ادخل روم صوتي أول',
-        ephemeral: true
-      });
+    try {
+      await connectToVoice(interaction);
+      return interaction.reply('🎧 دخلت الروم');
+    } catch {
+      return interaction.reply({ content: '❌ ادخل روم صوتي أول', ephemeral: true });
     }
-
-    joinVoiceChannel({
-      channelId: channel.id,
-      guildId: interaction.guild.id,
-      adapterCreator: interaction.guild.voiceAdapterCreator
-    });
-
-    return interaction.reply('🎧 دخلت الروم');
   }
 
   if (interaction.commandName === 'leave') {
     const connection = getVoiceConnection(interaction.guild.id);
 
     if (!connection) {
-      return interaction.reply({
-        content: '❌ مو داخل روم',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ مو داخل روم', ephemeral: true });
     }
+
+    const player = players.get(interaction.guild.id);
+    if (player) player.stop();
 
     connection.destroy();
     return interaction.reply('👋 طلعت من الروم');
+  }
+
+  if (interaction.commandName === 'quran') {
+    try {
+      const connection = await connectToVoice(interaction);
+      const player = getOrCreatePlayer(interaction.guild.id);
+
+      const resource = createAudioResource(QURAN_URL, {
+        inputType: StreamType.Arbitrary,
+        inlineVolume: true
+      });
+
+      if (resource.volume) {
+        resource.volume.setVolume(0.5);
+      }
+
+      connection.subscribe(player);
+      player.play(resource);
+
+      return interaction.reply('📖 تم تشغيل القرآن');
+    } catch (error) {
+      console.error('❌ خطأ تشغيل القرآن:', error);
+
+      if (error.message === 'VOICE_REQUIRED') {
+        return interaction.reply({ content: '❌ ادخل روم صوتي أول', ephemeral: true });
+      }
+
+      return interaction.reply({ content: '❌ صار خطأ أثناء تشغيل القرآن', ephemeral: true });
+    }
+  }
+
+  if (interaction.commandName === 'stopquran') {
+    const player = players.get(interaction.guild.id);
+
+    if (!player) {
+      return interaction.reply({ content: '❌ ما فيه تشغيل حالي', ephemeral: true });
+    }
+
+    player.stop();
+    return interaction.reply('⏹️ تم إيقاف القرآن');
   }
 
   if (interaction.commandName === 'ban') {
@@ -251,9 +292,8 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       await member.ban({ reason });
-
       return interaction.reply(`🚫 تم حظر ${user.tag}\nالسبب: ${reason}`);
-    } catch (error) {
+    } catch {
       return interaction.reply({
         content: '❌ صار خطأ أثناء الحظر',
         ephemeral: true
@@ -276,9 +316,8 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       await member.kick(reason);
-
       return interaction.reply(`👢 تم طرد ${user.tag}\nالسبب: ${reason}`);
-    } catch (error) {
+    } catch {
       return interaction.reply({
         content: '❌ صار خطأ أثناء الطرد',
         ephemeral: true
@@ -302,9 +341,8 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       await member.timeout(minutes * 60 * 1000, reason);
-
       return interaction.reply(`⏳ تم إعطاء ميوت لـ ${user.tag} لمدة ${minutes} دقيقة\nالسبب: ${reason}`);
-    } catch (error) {
+    } catch {
       return interaction.reply({
         content: '❌ صار خطأ أثناء إعطاء الميوت',
         ephemeral: true
@@ -324,12 +362,11 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
       await interaction.channel.bulkDelete(amount, true);
-
       return interaction.reply({
         content: `🧹 تم حذف ${amount} رسالة`,
         ephemeral: true
       });
-    } catch (error) {
+    } catch {
       return interaction.reply({
         content: '❌ صار خطأ أثناء حذف الرسائل',
         ephemeral: true
