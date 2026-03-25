@@ -34,11 +34,17 @@ const adhkar = [
   'سبحان الله وبحمده',
   'سبحان الله العظيم',
   'أستغفر الله',
+  'أستغفر الله العظيم وأتوب إليه',
   'لا حول ولا قوة إلا بالله',
   'اللهم صل وسلم على نبينا محمد',
   'حسبي الله لا إله إلا هو عليه توكلت وهو رب العرش العظيم',
   'اللهم اغفر لي ولوالدي وللمؤمنين والمؤمنات',
-  'اللهم إنك عفو تحب العفو فاعفُ عني'
+  'اللهم إنك عفو تحب العفو فاعفُ عني',
+  'اللهم آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار',
+  'اللهم إني أسألك الجنة وأعوذ بك من النار',
+  'اللهم اجعل القرآن ربيع قلبي ونور صدري',
+  'اللهم إني أعوذ بك من الهم والحزن',
+  'اللهم ارزقني حسن الخاتمة'
 ];
 
 // رابط قرآن مباشر
@@ -215,11 +221,14 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.commandName === 'join') {
+    await interaction.deferReply({ ephemeral: true });
+
     try {
       await connectToVoice(interaction);
-      return interaction.reply('🎧 دخلت الروم');
-    } catch {
-      return interaction.reply({ content: '❌ ادخل روم صوتي أول', ephemeral: true });
+      return interaction.editReply('🎧 دخلت الروم');
+    } catch (error) {
+      console.error('❌ خطأ join:', error);
+      return interaction.editReply('❌ ادخل روم صوتي أول');
     }
   }
 
@@ -227,7 +236,10 @@ client.on('interactionCreate', async (interaction) => {
     const connection = getVoiceConnection(interaction.guild.id);
 
     if (!connection) {
-      return interaction.reply({ content: '❌ مو داخل روم', ephemeral: true });
+      return interaction.reply({
+        content: '❌ مو داخل روم',
+        ephemeral: true
+      });
     }
 
     const player = players.get(interaction.guild.id);
@@ -238,6 +250,8 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.commandName === 'quran') {
+    await interaction.deferReply({ ephemeral: true });
+
     try {
       const connection = await connectToVoice(interaction);
       const player = getOrCreatePlayer(interaction.guild.id);
@@ -254,15 +268,10 @@ client.on('interactionCreate', async (interaction) => {
       connection.subscribe(player);
       player.play(resource);
 
-      return interaction.reply('📖 تم تشغيل القرآن');
+      return interaction.editReply('📖 تم تشغيل القرآن');
     } catch (error) {
       console.error('❌ خطأ تشغيل القرآن:', error);
-
-      if (error.message === 'VOICE_REQUIRED') {
-        return interaction.reply({ content: '❌ ادخل روم صوتي أول', ephemeral: true });
-      }
-
-      return interaction.reply({ content: '❌ صار خطأ أثناء تشغيل القرآن', ephemeral: true });
+      return interaction.editReply('❌ صار خطأ أثناء تشغيل القرآن');
     }
   }
 
@@ -270,7 +279,10 @@ client.on('interactionCreate', async (interaction) => {
     const player = players.get(interaction.guild.id);
 
     if (!player) {
-      return interaction.reply({ content: '❌ ما فيه تشغيل حالي', ephemeral: true });
+      return interaction.reply({
+        content: '❌ ما فيه تشغيل حالي',
+        ephemeral: true
+      });
     }
 
     player.stop();
@@ -293,7 +305,8 @@ client.on('interactionCreate', async (interaction) => {
 
       await member.ban({ reason });
       return interaction.reply(`🚫 تم حظر ${user.tag}\nالسبب: ${reason}`);
-    } catch {
+    } catch (error) {
+      console.error('❌ خطأ ban:', error);
       return interaction.reply({
         content: '❌ صار خطأ أثناء الحظر',
         ephemeral: true
@@ -317,7 +330,8 @@ client.on('interactionCreate', async (interaction) => {
 
       await member.kick(reason);
       return interaction.reply(`👢 تم طرد ${user.tag}\nالسبب: ${reason}`);
-    } catch {
+    } catch (error) {
+      console.error('❌ خطأ kick:', error);
       return interaction.reply({
         content: '❌ صار خطأ أثناء الطرد',
         ephemeral: true
@@ -342,7 +356,8 @@ client.on('interactionCreate', async (interaction) => {
 
       await member.timeout(minutes * 60 * 1000, reason);
       return interaction.reply(`⏳ تم إعطاء ميوت لـ ${user.tag} لمدة ${minutes} دقيقة\nالسبب: ${reason}`);
-    } catch {
+    } catch (error) {
+      console.error('❌ خطأ timeout:', error);
       return interaction.reply({
         content: '❌ صار خطأ أثناء إعطاء الميوت',
         ephemeral: true
@@ -366,7 +381,8 @@ client.on('interactionCreate', async (interaction) => {
         content: `🧹 تم حذف ${amount} رسالة`,
         ephemeral: true
       });
-    } catch {
+    } catch (error) {
+      console.error('❌ خطأ clear:', error);
       return interaction.reply({
         content: '❌ صار خطأ أثناء حذف الرسائل',
         ephemeral: true
