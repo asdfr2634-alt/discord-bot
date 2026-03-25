@@ -16,7 +16,7 @@ const {
   NoSubscriberBehavior,
   entersState,
   VoiceConnectionStatus,
-  StreamType
+  AudioPlayerStatus
 } = require('@discordjs/voice');
 
 const client = new Client({
@@ -25,6 +25,8 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates
   ]
 });
+
+const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
 
 const adhkar = [
   'سبحان الله',
@@ -46,9 +48,6 @@ const adhkar = [
   'اللهم إني أعوذ بك من الهم والحزن',
   'اللهم ارزقني حسن الخاتمة'
 ];
-
-// رابط قرآن مباشر
-const QURAN_URL = 'https://download.quranicaudio.com/qdc/mishari_al_afasy/murattal/001.mp3';
 
 function randomZekr() {
   return adhkar[Math.floor(Math.random() * adhkar.length)];
@@ -175,6 +174,18 @@ function getOrCreatePlayer(guildId) {
       console.error('❌ خطأ في مشغل الصوت:', error.message);
     });
 
+    player.on('stateChange', (oldState, newState) => {
+      console.log(`🎵 Audio player: ${oldState.status} -> ${newState.status}`);
+    });
+
+    player.on(AudioPlayerStatus.Playing, () => {
+      console.log('▶️ بدأ تشغيل الصوت');
+    });
+
+    player.on(AudioPlayerStatus.Idle, () => {
+      console.log('⏹️ توقف الصوت');
+    });
+
     players.set(guildId, player);
   }
 
@@ -191,7 +202,8 @@ async function connectToVoice(interaction) {
   const connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: interaction.guild.id,
-    adapterCreator: interaction.guild.voiceAdapterCreator
+    adapterCreator: interaction.guild.voiceAdapterCreator,
+    selfDeaf: false
   });
 
   await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
@@ -257,12 +269,11 @@ client.on('interactionCreate', async (interaction) => {
       const player = getOrCreatePlayer(interaction.guild.id);
 
       const resource = createAudioResource(QURAN_URL, {
-        inputType: StreamType.Arbitrary,
         inlineVolume: true
       });
 
       if (resource.volume) {
-        resource.volume.setVolume(0.5);
+        resource.volume.setVolume(1);
       }
 
       connection.subscribe(player);
