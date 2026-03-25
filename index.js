@@ -1,12 +1,17 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  REST,
+  Routes,
+  SlashCommandBuilder
+} = require('discord.js');
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates
   ]
 });
@@ -33,17 +38,47 @@ function randomZekr() {
 function createZekrEmbed() {
   return new EmbedBuilder()
     .setColor('#2F3136')
-    .setAuthor({
-      name: 'نظام الأذكار'
-    })
+    .setAuthor({ name: 'نظام الأذكار' })
     .setTitle('📿 ذكر')
     .setDescription(`╭・${randomZekr()}\n╰・اذكر الله واطمئن قلبك`)
     .addFields(
       { name: 'الفضل', value: 'الذكر نور للقلب وطمأنينة للنفس', inline: false },
       { name: 'تنبيه', value: 'أكثروا من الصلاة على النبي ﷺ', inline: false }
     )
-    .setFooter({ text: 'أذكار تلقائية • Time Dosn' })
+    .setFooter({ text: 'أذكار تلقائية • Discord Bot' })
     .setTimestamp();
+}
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName('zekr')
+    .setDescription('يرسل ذكرًا جميلًا'),
+  new SlashCommandBuilder()
+    .setName('join')
+    .setDescription('يدخل البوت إلى الروم الصوتي'),
+  new SlashCommandBuilder()
+    .setName('leave')
+    .setDescription('يخرج البوت من الروم الصوتي')
+].map(command => command.toJSON());
+
+async function registerSlashCommands() {
+  try {
+    console.log('⏳ جاري تسجيل أوامر السلاش...');
+
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+    await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands }
+    );
+
+    console.log('✅ تم تسجيل أوامر السلاش');
+  } catch (error) {
+    console.error('❌ خطأ في تسجيل أوامر السلاش:', error);
+  }
 }
 
 client.once('ready', async () => {
@@ -56,44 +91,53 @@ client.once('ready', async () => {
 
       await channel.send({ embeds: [createZekrEmbed()] });
     } catch (error) {
-      console.error('خطأ في إرسال الذكر:', error);
+      console.error('❌ خطأ في إرسال الذكر:', error);
     }
   }, 1800000);
 });
 
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
 
-  if (message.content === '!ذكر') {
-    await message.channel.send({ embeds: [createZekrEmbed()] });
+  if (interaction.commandName === 'zekr') {
+    return interaction.reply({ embeds: [createZekrEmbed()] });
   }
 
-  if (message.content === '!join') {
-    const channel = message.member?.voice?.channel;
+  if (interaction.commandName === 'join') {
+    const channel = interaction.member.voice.channel;
 
     if (!channel) {
-      return message.reply('❌ ادخل روم صوتي أول');
+      return interaction.reply({
+        content: '❌ ادخل روم صوتي أول',
+        ephemeral: true
+      });
     }
 
     joinVoiceChannel({
       channelId: channel.id,
-      guildId: message.guild.id,
-      adapterCreator: message.guild.voiceAdapterCreator
+      guildId: interaction.guild.id,
+      adapterCreator: interaction.guild.voiceAdapterCreator
     });
 
-    return message.reply('🎧 دخلت الروم');
+    return interaction.reply('🎧 دخلت الروم');
   }
 
-  if (message.content === '!leave') {
-    const connection = getVoiceConnection(message.guild.id);
+  if (interaction.commandName === 'leave') {
+    const connection = getVoiceConnection(interaction.guild.id);
 
     if (!connection) {
-      return message.reply('❌ مو داخل روم');
+      return interaction.reply({
+        content: '❌ مو داخل روم',
+        ephemeral: true
+      });
     }
 
     connection.destroy();
-    return message.reply('👋 طلعت من الروم');
+    return interaction.reply('👋 طلعت من الروم');
   }
 });
 
-client.login(process.env.TOKEN);
+(async () => {
+  await registerSlashCommands();
+  await client.login(process.env.TOKEN);
+})();
