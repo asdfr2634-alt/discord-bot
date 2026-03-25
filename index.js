@@ -5,7 +5,8 @@ const {
   EmbedBuilder,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  PermissionFlagsBits
 } = require('discord.js');
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 
@@ -53,12 +54,66 @@ const commands = [
   new SlashCommandBuilder()
     .setName('zekr')
     .setDescription('يرسل ذكرًا جميلًا'),
+
   new SlashCommandBuilder()
     .setName('join')
     .setDescription('يدخل البوت إلى الروم الصوتي'),
+
   new SlashCommandBuilder()
     .setName('leave')
-    .setDescription('يخرج البوت من الروم الصوتي')
+    .setDescription('يخرج البوت من الروم الصوتي'),
+
+  new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('حظر عضو')
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('العضو')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('reason')
+        .setDescription('سبب الحظر')
+        .setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('طرد عضو')
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('العضو')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('reason')
+        .setDescription('سبب الطرد')
+        .setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
+
+  new SlashCommandBuilder()
+    .setName('timeout')
+    .setDescription('إعطاء ميوت مؤقت لعضو')
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('العضو')
+        .setRequired(true))
+    .addIntegerOption(option =>
+      option.setName('minutes')
+        .setDescription('مدة الميوت بالدقائق')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('reason')
+        .setDescription('سبب الميوت')
+        .setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+  new SlashCommandBuilder()
+    .setName('clear')
+    .setDescription('حذف عدد من الرسائل')
+    .addIntegerOption(option =>
+      option.setName('amount')
+        .setDescription('عدد الرسائل')
+        .setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 ].map(command => command.toJSON());
 
 async function registerSlashCommands() {
@@ -83,6 +138,8 @@ async function registerSlashCommands() {
 
 client.once('ready', async () => {
   console.log(`🔥 Logged in as ${client.user.tag}`);
+
+  await registerSlashCommands();
 
   setInterval(async () => {
     try {
@@ -135,9 +192,107 @@ client.on('interactionCreate', async (interaction) => {
     connection.destroy();
     return interaction.reply('👋 طلعت من الروم');
   }
+
+  if (interaction.commandName === 'ban') {
+    const user = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason') || 'بدون سبب';
+
+    try {
+      const member = await interaction.guild.members.fetch(user.id);
+
+      if (!member.bannable) {
+        return interaction.reply({
+          content: '❌ ما أقدر أحظر هذا العضو',
+          ephemeral: true
+        });
+      }
+
+      await member.ban({ reason });
+
+      return interaction.reply(`🚫 تم حظر ${user.tag}\nالسبب: ${reason}`);
+    } catch (error) {
+      return interaction.reply({
+        content: '❌ صار خطأ أثناء الحظر',
+        ephemeral: true
+      });
+    }
+  }
+
+  if (interaction.commandName === 'kick') {
+    const user = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason') || 'بدون سبب';
+
+    try {
+      const member = await interaction.guild.members.fetch(user.id);
+
+      if (!member.kickable) {
+        return interaction.reply({
+          content: '❌ ما أقدر أطرد هذا العضو',
+          ephemeral: true
+        });
+      }
+
+      await member.kick(reason);
+
+      return interaction.reply(`👢 تم طرد ${user.tag}\nالسبب: ${reason}`);
+    } catch (error) {
+      return interaction.reply({
+        content: '❌ صار خطأ أثناء الطرد',
+        ephemeral: true
+      });
+    }
+  }
+
+  if (interaction.commandName === 'timeout') {
+    const user = interaction.options.getUser('user');
+    const minutes = interaction.options.getInteger('minutes');
+    const reason = interaction.options.getString('reason') || 'بدون سبب';
+
+    try {
+      const member = await interaction.guild.members.fetch(user.id);
+
+      if (!member.moderatable) {
+        return interaction.reply({
+          content: '❌ ما أقدر أعطي ميوت لهذا العضو',
+          ephemeral: true
+        });
+      }
+
+      await member.timeout(minutes * 60 * 1000, reason);
+
+      return interaction.reply(`⏳ تم إعطاء ميوت لـ ${user.tag} لمدة ${minutes} دقيقة\nالسبب: ${reason}`);
+    } catch (error) {
+      return interaction.reply({
+        content: '❌ صار خطأ أثناء إعطاء الميوت',
+        ephemeral: true
+      });
+    }
+  }
+
+  if (interaction.commandName === 'clear') {
+    const amount = interaction.options.getInteger('amount');
+
+    if (amount < 1 || amount > 100) {
+      return interaction.reply({
+        content: '❌ لازم يكون العدد بين 1 و 100',
+        ephemeral: true
+      });
+    }
+
+    try {
+      await interaction.channel.bulkDelete(amount, true);
+
+      return interaction.reply({
+        content: `🧹 تم حذف ${amount} رسالة`,
+        ephemeral: true
+      });
+    } catch (error) {
+      return interaction.reply({
+        content: '❌ صار خطأ أثناء حذف الرسائل',
+        ephemeral: true
+      });
+    }
+  }
 });
 
-(async () => {
-  await registerSlashCommands();
-  await client.login(process.env.TOKEN);
-})();
+client.login(process.env.TOKEN);
