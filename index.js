@@ -151,13 +151,16 @@ async function initDatabase() {
     );
   `);
 
-  await pool.query(`
+  await pool.query(
+    `
     INSERT INTO bot_stats (key, value) VALUES
     ('global_zekr_total', '0'),
     ('daily_zekr_total', '0'),
     ('daily_zekr_date', $1)
     ON CONFLICT (key) DO NOTHING
-  `, [getTodayRiyadh()]);
+    `,
+    [getTodayRiyadh()]
+  );
 
   await ensureDailyChallengeFresh();
   console.log('✅ تم تجهيز قاعدة البيانات');
@@ -174,12 +177,15 @@ async function getStat(key, defaultValue = '0') {
 }
 
 async function setStat(key, value) {
-  await pool.query(`
+  await pool.query(
+    `
     INSERT INTO bot_stats (key, value)
     VALUES ($1, $2)
     ON CONFLICT (key)
     DO UPDATE SET value = EXCLUDED.value
-  `, [key, String(value)]);
+    `,
+    [key, String(value)]
+  );
 }
 
 async function ensureDailyChallengeFresh() {
@@ -228,24 +234,30 @@ async function getUserCount(userId) {
 }
 
 async function increaseUserCount(userId) {
-  const result = await pool.query(`
+  const result = await pool.query(
+    `
     INSERT INTO user_zekr_counts (user_id, count)
     VALUES ($1, 1)
     ON CONFLICT (user_id)
     DO UPDATE SET count = user_zekr_counts.count + 1
     RETURNING count
-  `, [userId]);
+    `,
+    [userId]
+  );
 
   return Number(result.rows[0].count) || 0;
 }
 
 async function getTopUsers(limit = 10) {
-  const result = await pool.query(`
+  const result = await pool.query(
+    `
     SELECT user_id, count
     FROM user_zekr_counts
     ORDER BY count DESC, user_id ASC
     LIMIT $1
-  `, [limit]);
+    `,
+    [limit]
+  );
 
   return result.rows.map((row) => ({
     userId: row.user_id,
@@ -254,31 +266,27 @@ async function getTopUsers(limit = 10) {
 }
 
 async function subscribeUser(userId) {
-  await pool.query(`
+  await pool.query(
+    `
     INSERT INTO dm_subscribers (user_id, subscribed)
     VALUES ($1, TRUE)
     ON CONFLICT (user_id)
     DO UPDATE SET subscribed = TRUE
-  `, [userId]);
+    `,
+    [userId]
+  );
 }
 
 async function unsubscribeUser(userId) {
-  await pool.query(`
+  await pool.query(
+    `
     INSERT INTO dm_subscribers (user_id, subscribed)
     VALUES ($1, FALSE)
     ON CONFLICT (user_id)
     DO UPDATE SET subscribed = FALSE
-  `, [userId]);
-}
-
-async function isSubscribed(userId) {
-  const result = await pool.query(
-    'SELECT subscribed FROM dm_subscribers WHERE user_id = $1',
+    `,
     [userId]
   );
-
-  if (!result.rows.length) return false;
-  return Boolean(result.rows[0].subscribed);
 }
 
 async function getSubscribedUsers() {
@@ -366,7 +374,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('subscribe')
-    .setDescription('الاشتراك في الرسائل الخاصة المرسلة من الإدارة'),
+    .setDescription('الاشتراك في الرسائل الخاصة الخاصة بالإدارة'),
 
   new SlashCommandBuilder()
     .setName('unsubscribe')
