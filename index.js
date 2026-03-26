@@ -8,7 +8,8 @@ const {
   SlashCommandBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ActionRowBuilder
+  ActionRowBuilder,
+  PermissionFlagsBits
 } = require('discord.js');
 const {
   joinVoiceChannel,
@@ -34,7 +35,6 @@ const client = new Client({
 
 const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
 const DAILY_GOAL = Number(process.env.DAILY_GOAL || 1000);
-const REMINDER_CHECK_INTERVAL_MS = 60 * 1000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -66,51 +66,25 @@ const adhkar = [
   'اللهم ارزقني حسن الخاتمة',
   'سبحان الله عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته',
   'رضيت بالله ربًا وبالإسلام دينًا وبمحمد ﷺ نبيًا',
-  'اللهم اغفر لي ذنبي كله دقه وجله وأوله وآخره',
   'اللهم إني أسألك الهدى والتقى والعفاف والغنى',
-  'اللهم أصلح لي ديني الذي هو عصمة أمري',
-  'اللهم أصلح لي دنياي التي فيها معاشي',
-  'اللهم أصلح لي آخرتي التي إليها معادي',
-  'اللهم اجعل الحياة زيادة لي في كل خير',
-  'اللهم اجعل الموت راحة لي من كل شر',
   'يا حي يا قيوم برحمتك أستغيث',
-  'اللهم اكفني بحلالك عن حرامك وأغنني بفضلك عمن سواك',
-  'اللهم إني أعوذ بك من العجز والكسل',
-  'اللهم إني أعوذ بك من الجبن والبخل',
-  'اللهم إني أعوذ بك من غلبة الدين وقهر الرجال',
-  'رب اغفر لي وتب علي إنك أنت التواب الرحيم',
-  'ربنا آتنا من لدنك رحمة وهيئ لنا من أمرنا رشدًا',
   'رب اشرح لي صدري ويسر لي أمري',
   'رب زدني علمًا',
   'اللهم ثبت قلبي على دينك',
-  'اللهم مصرف القلوب صرف قلبي على طاعتك',
   'لا إله إلا أنت سبحانك إني كنت من الظالمين',
   'أعوذ بكلمات الله التامات من شر ما خلق',
-  'بسم الله الذي لا يضر مع اسمه شيء في الأرض ولا في السماء وهو السميع العليم',
   'اللهم إني أسألك العفو والعافية في الدنيا والآخرة',
-  'اللهم متعني بسمعي وبصري واجعلهما الوارث مني',
-  'اللهم إني أسألك من خير ما سألك منه نبيك محمد ﷺ',
-  'وأعوذ بك من شر ما استعاذ منه نبيك محمد ﷺ',
-  'اللهم إني أسألك الثبات في الأمر والعزيمة على الرشد',
-  'اللهم إني أسألك قلبًا سليمًا ولسانًا صادقًا',
-  'اللهم اجعلني لك شاكرًا لك ذاكرًا لك راهبًا لك مطواعًا',
   'اللهم تقبل توبتي واغسل حوبتي وأجب دعوتي',
   'اللهم احفظني من بين يدي ومن خلفي وعن يميني وعن شمالي',
-  'اللهم إني أعوذ بعظمتك أن أغتال من تحتي',
   'اللهم إني أعوذ بك من زوال نعمتك وتحول عافيتك',
-  'اللهم إني أسألك اليسر بعد العسر',
   'اللهم فرج همي ويسر أمري',
   'اللهم ارزقني من حيث لا أحتسب',
   'اللهم بارك لي في وقتي وعملي ومالي',
   'اللهم اجعلني من الذاكرين الشاكرين',
   'اللهم اجعل آخر كلامي من الدنيا لا إله إلا الله',
-  'اللهم انفعني بما علمتني وعلمني ما ينفعني',
   'ربنا تقبل منا إنك أنت السميع العليم',
-  'ربنا اغفر لنا ولوالدينا ولجميع المسلمين',
-  'اللهم استرني فوق الأرض وتحت الأرض ويوم العرض'
+  'ربنا اغفر لنا ولوالدينا ولجميع المسلمين'
 ];
-
-const players = new Map();
 
 const rankTiers = [
   { name: 'مبتدئ', min: 0 },
@@ -121,6 +95,8 @@ const rankTiers = [
   { name: 'أسطورة الذكر', min: 1000 }
 ];
 
+const players = new Map();
+
 function getTodayRiyadh() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Riyadh',
@@ -129,38 +105,34 @@ function getTodayRiyadh() {
     day: '2-digit'
   }).formatToParts(new Date());
 
-  const year = parts.find(p => p.type === 'year').value;
-  const month = parts.find(p => p.type === 'month').value;
-  const day = parts.find(p => p.type === 'day').value;
+  const year = parts.find((p) => p.type === 'year')?.value;
+  const month = parts.find((p) => p.type === 'month')?.value;
+  const day = parts.find((p) => p.type === 'day')?.value;
 
   return `${year}-${month}-${day}`;
-}
-
-function getRankByCount(count) {
-  let currentRank = rankTiers[0];
-
-  for (const tier of rankTiers) {
-    if (count >= tier.min) {
-      currentRank = tier;
-    }
-  }
-
-  return currentRank;
-}
-
-function getNextRank(count) {
-  return rankTiers.find(tier => tier.min > count) || null;
 }
 
 function randomZekr() {
   return adhkar[Math.floor(Math.random() * adhkar.length)];
 }
 
+function getRankByCount(count) {
+  let currentRank = rankTiers[0];
+  for (const tier of rankTiers) {
+    if (count >= tier.min) currentRank = tier;
+  }
+  return currentRank;
+}
+
+function getNextRank(count) {
+  return rankTiers.find((tier) => tier.min > count) || null;
+}
+
 async function initDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bot_stats (
       key TEXT PRIMARY KEY,
-      value BIGINT NOT NULL DEFAULT 0
+      value TEXT NOT NULL
     );
   `);
 
@@ -172,35 +144,26 @@ async function initDatabase() {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_reminders (
+    CREATE TABLE IF NOT EXISTS dm_subscribers (
       user_id TEXT PRIMARY KEY,
-      interval_minutes INTEGER NOT NULL,
-      next_reminder_at TIMESTAMPTZ NOT NULL,
-      enabled BOOLEAN NOT NULL DEFAULT TRUE
+      subscribed BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
   await pool.query(`
-    INSERT INTO bot_stats (key, value)
-    VALUES 
-      ('global_zekr_total', 0),
-      ('daily_zekr_total', 0)
-    ON CONFLICT (key) DO NOTHING;
-  `);
+    INSERT INTO bot_stats (key, value) VALUES
+    ('global_zekr_total', '0'),
+    ('daily_zekr_total', '0'),
+    ('daily_zekr_date', $1)
+    ON CONFLICT (key) DO NOTHING
+  `, [getTodayRiyadh()]);
 
-  await pool.query(`
-    INSERT INTO bot_stats (key, value)
-    VALUES ('daily_zekr_date', 0)
-    ON CONFLICT (key) DO NOTHING;
-  `);
-
-  await setDailyDateIfMissing();
   await ensureDailyChallengeFresh();
-
   console.log('✅ تم تجهيز قاعدة البيانات');
 }
 
-async function getStat(key, defaultValue = 0) {
+async function getStat(key, defaultValue = '0') {
   const result = await pool.query(
     'SELECT value FROM bot_stats WHERE key = $1',
     [key]
@@ -211,24 +174,12 @@ async function getStat(key, defaultValue = 0) {
 }
 
 async function setStat(key, value) {
-  await pool.query(
-    `
-      INSERT INTO bot_stats (key, value)
-      VALUES ($1, $2)
-      ON CONFLICT (key)
-      DO UPDATE SET value = EXCLUDED.value
-    `,
-    [key, value]
-  );
-}
-
-async function setDailyDateIfMissing() {
-  const today = getTodayRiyadh();
-  const current = await getStat('daily_zekr_date', null);
-
-  if (!current || current === '0') {
-    await setStat('daily_zekr_date', today);
-  }
+  await pool.query(`
+    INSERT INTO bot_stats (key, value)
+    VALUES ($1, $2)
+    ON CONFLICT (key)
+    DO UPDATE SET value = EXCLUDED.value
+  `, [key, String(value)]);
 }
 
 async function ensureDailyChallengeFresh() {
@@ -238,51 +189,32 @@ async function ensureDailyChallengeFresh() {
   if (currentDate !== today) {
     await setStat('daily_zekr_date', today);
     await setStat('daily_zekr_total', 0);
-    console.log(`🔄 تم تصفير التحدي اليومي لليوم الجديد: ${today}`);
+    console.log(`🔄 تم تصفير التحدي اليومي: ${today}`);
   }
 }
 
 async function getGlobalTotal() {
-  const value = await getStat('global_zekr_total', 0);
-  return Number(value || 0);
+  return Number(await getStat('global_zekr_total', '0')) || 0;
 }
 
 async function increaseGlobalTotal() {
-  const result = await pool.query(
-    `
-      INSERT INTO bot_stats (key, value)
-      VALUES ($1, 1)
-      ON CONFLICT (key)
-      DO UPDATE SET value = bot_stats.value + 1
-      RETURNING value
-    `,
-    ['global_zekr_total']
-  );
-
-  return Number(result.rows[0].value || 0);
+  const current = await getGlobalTotal();
+  const next = current + 1;
+  await setStat('global_zekr_total', next);
+  return next;
 }
 
 async function getDailyTotal() {
   await ensureDailyChallengeFresh();
-  const value = await getStat('daily_zekr_total', 0);
-  return Number(value || 0);
+  return Number(await getStat('daily_zekr_total', '0')) || 0;
 }
 
 async function increaseDailyTotal() {
   await ensureDailyChallengeFresh();
-
-  const result = await pool.query(
-    `
-      INSERT INTO bot_stats (key, value)
-      VALUES ($1, 1)
-      ON CONFLICT (key)
-      DO UPDATE SET value = bot_stats.value + 1
-      RETURNING value
-    `,
-    ['daily_zekr_total']
-  );
-
-  return Number(result.rows[0].value || 0);
+  const current = await getDailyTotal();
+  const next = current + 1;
+  await setStat('daily_zekr_total', next);
+  return next;
 }
 
 async function getUserCount(userId) {
@@ -292,128 +224,72 @@ async function getUserCount(userId) {
   );
 
   if (!result.rows.length) return 0;
-  return Number(result.rows[0].count || 0);
+  return Number(result.rows[0].count) || 0;
 }
 
 async function increaseUserCount(userId) {
-  const result = await pool.query(
-    `
-      INSERT INTO user_zekr_counts (user_id, count)
-      VALUES ($1, 1)
-      ON CONFLICT (user_id)
-      DO UPDATE SET count = user_zekr_counts.count + 1
-      RETURNING count
-    `,
-    [userId]
-  );
+  const result = await pool.query(`
+    INSERT INTO user_zekr_counts (user_id, count)
+    VALUES ($1, 1)
+    ON CONFLICT (user_id)
+    DO UPDATE SET count = user_zekr_counts.count + 1
+    RETURNING count
+  `, [userId]);
 
-  return Number(result.rows[0].count || 0);
+  return Number(result.rows[0].count) || 0;
 }
 
 async function getTopUsers(limit = 10) {
-  const result = await pool.query(
-    `
-      SELECT user_id, count
-      FROM user_zekr_counts
-      ORDER BY count DESC, user_id ASC
-      LIMIT $1
-    `,
-    [limit]
-  );
+  const result = await pool.query(`
+    SELECT user_id, count
+    FROM user_zekr_counts
+    ORDER BY count DESC, user_id ASC
+    LIMIT $1
+  `, [limit]);
 
-  return result.rows.map(row => ({
+  return result.rows.map((row) => ({
     userId: row.user_id,
-    count: Number(row.count)
+    count: Number(row.count) || 0
   }));
 }
 
-async function setReminder(userId, minutes) {
-  const result = await pool.query(
-    `
-      INSERT INTO user_reminders (user_id, interval_minutes, next_reminder_at, enabled)
-      VALUES ($1, $2, NOW() + ($2 || ' minutes')::interval, TRUE)
-      ON CONFLICT (user_id)
-      DO UPDATE SET
-        interval_minutes = EXCLUDED.interval_minutes,
-        next_reminder_at = EXCLUDED.next_reminder_at,
-        enabled = TRUE
-      RETURNING interval_minutes, next_reminder_at, enabled
-    `,
-    [userId, minutes]
-  );
-
-  return result.rows[0];
+async function subscribeUser(userId) {
+  await pool.query(`
+    INSERT INTO dm_subscribers (user_id, subscribed)
+    VALUES ($1, TRUE)
+    ON CONFLICT (user_id)
+    DO UPDATE SET subscribed = TRUE
+  `, [userId]);
 }
 
-async function disableReminder(userId) {
+async function unsubscribeUser(userId) {
+  await pool.query(`
+    INSERT INTO dm_subscribers (user_id, subscribed)
+    VALUES ($1, FALSE)
+    ON CONFLICT (user_id)
+    DO UPDATE SET subscribed = FALSE
+  `, [userId]);
+}
+
+async function isSubscribed(userId) {
   const result = await pool.query(
-    `
-      UPDATE user_reminders
-      SET enabled = FALSE
-      WHERE user_id = $1
-      RETURNING user_id
-    `,
+    'SELECT subscribed FROM dm_subscribers WHERE user_id = $1',
     [userId]
   );
 
-  return result.rowCount > 0;
+  if (!result.rows.length) return false;
+  return Boolean(result.rows[0].subscribed);
 }
 
-async function getReminder(userId) {
-  const result = await pool.query(
-    `
-      SELECT user_id, interval_minutes, next_reminder_at, enabled
-      FROM user_reminders
-      WHERE user_id = $1
-    `,
-    [userId]
-  );
+async function getSubscribedUsers() {
+  const result = await pool.query(`
+    SELECT user_id
+    FROM dm_subscribers
+    WHERE subscribed = TRUE
+    ORDER BY created_at ASC
+  `);
 
-  return result.rows[0] || null;
-}
-
-async function processDueReminders() {
-  try {
-    const result = await pool.query(
-      `
-        SELECT user_id, interval_minutes
-        FROM user_reminders
-        WHERE enabled = TRUE
-          AND next_reminder_at <= NOW()
-        ORDER BY next_reminder_at ASC
-        LIMIT 25
-      `
-    );
-
-    for (const row of result.rows) {
-      const userId = row.user_id;
-      const intervalMinutes = Number(row.interval_minutes);
-
-      try {
-        const user = await client.users.fetch(userId);
-        if (user) {
-          await user.send('📿 تذكير لطيف: لا تنسَ الذكر والصلاة على النبي ﷺ');
-        }
-      } catch (error) {
-        console.error(`❌ تعذر إرسال DM للمستخدم ${userId}:`, error.message);
-      }
-
-      try {
-        await pool.query(
-          `
-            UPDATE user_reminders
-            SET next_reminder_at = NOW() + ($2 || ' minutes')::interval
-            WHERE user_id = $1
-          `,
-          [userId, intervalMinutes]
-        );
-      } catch (error) {
-        console.error(`❌ خطأ تحديث موعد التذكير للمستخدم ${userId}:`, error);
-      }
-    }
-  } catch (error) {
-    console.error('❌ خطأ في معالجة التذكيرات:', error);
-  }
+  return result.rows.map((row) => row.user_id);
 }
 
 async function createZekrEmbed(selectedZekr = randomZekr()) {
@@ -428,9 +304,9 @@ async function createZekrEmbed(selectedZekr = randomZekr()) {
     .addFields(
       { name: 'الفضل', value: 'الذكر نور للقلب وطمأنينة للنفس', inline: false },
       { name: 'تنبيه', value: 'أكثروا من الصلاة على النبي ﷺ', inline: false },
-      { name: 'العداد العام', value: `${globalTotal}`, inline: true },
+      { name: 'العداد العام', value: String(globalTotal), inline: true },
       { name: 'عداد اليوم', value: `${dailyTotal}/${DAILY_GOAL}`, inline: true },
-      { name: 'عدد الأذكار المتاحة', value: `${adhkar.length}`, inline: true }
+      { name: 'عدد الأذكار المتاحة', value: String(adhkar.length), inline: true }
     )
     .setFooter({ text: 'أذكار تلقائية • Discord Bot' })
     .setTimestamp();
@@ -489,34 +365,22 @@ const commands = [
     .setDescription('يعرض التحدي اليومي'),
 
   new SlashCommandBuilder()
-    .setName('reminder')
-    .setDescription('إعداد التذكير الخاص')
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('set')
-        .setDescription('تشغيل التذكير الخاص')
-        .addIntegerOption(option =>
-          option.setName('minutes')
-            .setDescription('كل كم دقيقة يوصلك تذكير')
-            .setRequired(true)
-            .addChoices(
-              { name: 'كل 10 دقائق', value: 10 },
-              { name: 'كل 30 دقيقة', value: 30 },
-              { name: 'كل 60 دقيقة', value: 60 },
-              { name: 'كل 120 دقيقة', value: 120 }
-            )
-        )
+    .setName('subscribe')
+    .setDescription('الاشتراك في الرسائل الخاصة المرسلة من الإدارة'),
+
+  new SlashCommandBuilder()
+    .setName('unsubscribe')
+    .setDescription('إلغاء الاشتراك في الرسائل الخاصة'),
+
+  new SlashCommandBuilder()
+    .setName('dmall')
+    .setDescription('إرسال رسالة خاصة للمشتركين فقط')
+    .addStringOption(option =>
+      option.setName('message')
+        .setDescription('الرسالة')
+        .setRequired(true)
     )
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('off')
-        .setDescription('إيقاف التذكير الخاص')
-    )
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('status')
-        .setDescription('عرض حالة التذكير الخاص')
-    ),
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   new SlashCommandBuilder()
     .setName('join')
@@ -568,41 +432,28 @@ const commands = [
         .setDescription('اكتب اقتراحك')
         .setRequired(true)
     )
-].map(command => command.toJSON());
+].map((command) => command.toJSON());
 
 async function registerSlashCommands() {
-  try {
-    console.log('⏳ جاري تسجيل أوامر السلاش...');
-    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  console.log('⏳ جاري تسجيل أوامر السلاش...');
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-    await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: commands }
-    );
+  await rest.put(
+    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+    { body: commands }
+  );
 
-    console.log('✅ تم تسجيل أوامر السلاش');
-  } catch (error) {
-    console.error('❌ خطأ في تسجيل أوامر السلاش:', error);
-  }
+  console.log('✅ تم تسجيل أوامر السلاش');
 }
 
 function getOrCreatePlayer(guildId) {
   if (!players.has(guildId)) {
     const player = createAudioPlayer({
-      behaviors: {
-        noSubscriber: NoSubscriberBehavior.Pause
-      }
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause }
     });
 
     player.on('error', (error) => {
       console.error('❌ خطأ في مشغل الصوت:', error.message);
-    });
-
-    player.on('stateChange', (oldState, newState) => {
-      console.log(`🎵 Audio player: ${oldState.status} -> ${newState.status}`);
     });
 
     player.on(AudioPlayerStatus.Playing, () => {
@@ -621,10 +472,7 @@ function getOrCreatePlayer(guildId) {
 
 async function connectToVoice(interaction) {
   const channel = interaction.member.voice.channel;
-
-  if (!channel) {
-    throw new Error('VOICE_REQUIRED');
-  }
+  if (!channel) throw new Error('VOICE_REQUIRED');
 
   const connection = joinVoiceChannel({
     channelId: channel.id,
@@ -638,48 +486,40 @@ async function connectToVoice(interaction) {
 }
 
 client.once('clientReady', async () => {
-  console.log(`🔥 Logged in as ${client.user.tag}`);
-
-  if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
-    console.error('❌ تأكد من TOKEN / CLIENT_ID / GUILD_ID');
-    return;
-  }
-
-  if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL غير موجود');
-    return;
-  }
-
   try {
-    await initDatabase();
-    console.log(`📿 العداد العام الحالي: ${await getGlobalTotal()}`);
-    console.log(`🎯 التحدي اليومي الحالي: ${await getDailyTotal()}/${DAILY_GOAL}`);
-  } catch (error) {
-    console.error('❌ خطأ في تهيئة قاعدة البيانات:', error);
-    return;
-  }
+    console.log(`🔥 Logged in as ${client.user.tag}`);
 
-  await registerSlashCommands();
-
-  setInterval(async () => {
-    try {
-      if (!process.env.AZKAR_CHANNEL_ID) return;
-      const channel = await client.channels.fetch(process.env.AZKAR_CHANNEL_ID).catch(() => null);
-      if (!channel) return;
-
-      await channel.send({
-        embeds: [await createZekrEmbed()],
-        components: [createZekrButtons()]
-      });
-    } catch (error) {
-      console.error('❌ خطأ في إرسال الذكر:', error);
+    if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
+      console.error('❌ تأكد من TOKEN / CLIENT_ID / GUILD_ID');
+      return;
     }
-  }, 1800000);
 
-  setInterval(async () => {
-    await ensureDailyChallengeFresh();
-    await processDueReminders();
-  }, REMINDER_CHECK_INTERVAL_MS);
+    if (!process.env.DATABASE_URL) {
+      console.error('❌ DATABASE_URL غير موجود');
+      return;
+    }
+
+    await initDatabase();
+    await registerSlashCommands();
+
+    if (process.env.AZKAR_CHANNEL_ID) {
+      setInterval(async () => {
+        try {
+          const channel = await client.channels.fetch(process.env.AZKAR_CHANNEL_ID).catch(() => null);
+          if (!channel) return;
+
+          await channel.send({
+            embeds: [await createZekrEmbed()],
+            components: [createZekrButtons()]
+          });
+        } catch (error) {
+          console.error('❌ خطأ في إرسال الذكر التلقائي:', error);
+        }
+      }, 1800000);
+    }
+  } catch (error) {
+    console.error('❌ خطأ أثناء تشغيل البوت:', error);
+  }
 });
 
 client.on('guildMemberAdd', async (member) => {
@@ -708,21 +548,16 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-  if (interaction.isButton()) {
-    if (interaction.customId === 'new_zekr') {
-      try {
+  try {
+    if (interaction.isButton()) {
+      if (interaction.customId === 'new_zekr') {
         return await interaction.update({
           embeds: [await createZekrEmbed()],
           components: [createZekrButtons()]
         });
-      } catch (error) {
-        console.error('❌ خطأ زر ذكر جديد:', error);
       }
-      return;
-    }
 
-    if (interaction.customId === 'count_zekr') {
-      try {
+      if (interaction.customId === 'count_zekr') {
         const beforeCount = await getUserCount(interaction.user.id);
         const personalCount = await increaseUserCount(interaction.user.id);
         const totalCount = await increaseGlobalTotal();
@@ -742,10 +577,6 @@ client.on('interactionCreate', async (interaction) => {
           extraText += `\n⬆️ باقي ${nextRank.min - personalCount} للوصول إلى رتبة ${nextRank.name}`;
         }
 
-        if (dailyTotal >= DAILY_GOAL) {
-          extraText += `\n🔥 تم تحقيق الهدف اليومي أو تجاوزه!`;
-        }
-
         await interaction.update({
           embeds: [await createZekrEmbed()],
           components: [createZekrButtons()]
@@ -755,92 +586,82 @@ client.on('interactionCreate', async (interaction) => {
           content: `✅ تم احتسابها لك\n${extraText}`,
           ephemeral: true
         });
-      } catch (error) {
-        console.error('❌ خطأ زر ذكرت:', error);
       }
+
       return;
     }
 
-    return;
-  }
+    if (!interaction.isChatInputCommand()) return;
 
-  if (!interaction.isChatInputCommand()) return;
-
-  if (interaction.commandName === 'zekr') {
-    return interaction.reply({
-      embeds: [await createZekrEmbed()],
-      components: [createZekrButtons()]
-    });
-  }
-
-  if (interaction.commandName === 'rank') {
-    const user = interaction.options.getUser('user') || interaction.user;
-    const count = await getUserCount(user.id);
-    const rank = getRankByCount(count);
-    const nextRank = getNextRank(count);
-
-    const fields = [
-      { name: 'العضو', value: `${user}`, inline: true },
-      { name: 'عدد الأذكار', value: `${count}`, inline: true },
-      { name: 'الرتبة الحالية', value: rank.name, inline: true }
-    ];
-
-    if (nextRank) {
-      fields.push({
-        name: 'الرتبة التالية',
-        value: `${nextRank.name} (باقي ${nextRank.min - count})`,
-        inline: false
+    if (interaction.commandName === 'zekr') {
+      await interaction.deferReply();
+      return await interaction.editReply({
+        embeds: [await createZekrEmbed()],
+        components: [createZekrButtons()]
       });
     }
 
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+    if (interaction.commandName === 'rank') {
+      await interaction.deferReply();
+      const user = interaction.options.getUser('user') || interaction.user;
+      const count = await getUserCount(user.id);
+      const rank = getRankByCount(count);
+      const nextRank = getNextRank(count);
+
+      const fields = [
+        { name: 'العضو', value: `${user}`, inline: true },
+        { name: 'عدد الأذكار', value: `${count}`, inline: true },
+        { name: 'الرتبة الحالية', value: rank.name, inline: true }
+      ];
+
+      if (nextRank) {
+        fields.push({
+          name: 'الرتبة التالية',
+          value: `${nextRank.name} (باقي ${nextRank.min - count})`,
+          inline: false
+        });
+      }
+
+      return await interaction.editReply({
+        embeds: [createEmbed({
           title: '🏅 الرتبة والأذكار',
           thumbnail: user.displayAvatarURL({ dynamic: true, size: 1024 }),
           fields,
           footer: 'Rank System'
-        })
-      ]
-    });
-  }
-
-  if (interaction.commandName === 'top') {
-    const topUsers = await getTopUsers(10);
-
-    if (!topUsers.length) {
-      return interaction.reply({
-        content: '❌ لا توجد بيانات كافية بعد',
-        ephemeral: true
+        })]
       });
     }
 
-    let description = '';
+    if (interaction.commandName === 'top') {
+      await interaction.deferReply();
+      const topUsers = await getTopUsers(10);
 
-    for (let i = 0; i < topUsers.length; i++) {
-      const row = topUsers[i];
-      description += `**${i + 1}.** <@${row.userId}> — \`${row.count}\`\n`;
-    }
+      if (!topUsers.length) {
+        return await interaction.editReply('❌ لا توجد بيانات كافية بعد');
+      }
 
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+      let description = '';
+      for (let i = 0; i < topUsers.length; i++) {
+        description += `**${i + 1}.** <@${topUsers[i].userId}> — \`${topUsers[i].count}\`\n`;
+      }
+
+      return await interaction.editReply({
+        embeds: [createEmbed({
           title: '🏆 أعلى 10 في الأذكار',
           description,
           footer: 'Top 10'
-        })
-      ]
-    });
-  }
+        })]
+      });
+    }
 
-  if (interaction.commandName === 'challenge') {
-    const dailyTotal = await getDailyTotal();
-    const percent = Math.min(100, Math.floor((dailyTotal / DAILY_GOAL) * 100));
-    const remaining = Math.max(0, DAILY_GOAL - dailyTotal);
+    if (interaction.commandName === 'challenge') {
+      await interaction.deferReply();
+      const dailyTotal = await getDailyTotal();
+      const percent = Math.min(100, Math.floor((dailyTotal / DAILY_GOAL) * 100));
+      const remaining = Math.max(0, DAILY_GOAL - dailyTotal);
 
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+      return await interaction.editReply({
+        embeds: [createEmbed({
           title: '🎯 التحدي اليومي',
           fields: [
             { name: 'تاريخ اليوم', value: getTodayRiyadh(), inline: true },
@@ -851,177 +672,142 @@ client.on('interactionCreate', async (interaction) => {
             { name: 'الحالة', value: dailyTotal >= DAILY_GOAL ? '✅ تم تحقيق الهدف' : '⏳ مستمر', inline: true }
           ],
           footer: 'Daily Challenge'
-        })
-      ]
-    });
-  }
+        })]
+      });
+    }
 
-  if (interaction.commandName === 'reminder') {
-    const sub = interaction.options.getSubcommand();
-
-    if (sub === 'set') {
-      const minutes = interaction.options.getInteger('minutes');
-      await setReminder(interaction.user.id, minutes);
-
-      return interaction.reply({
-        content: `✅ تم تشغيل التذكير الخاص لك كل ${minutes} دقيقة في الخاص`,
+    if (interaction.commandName === 'subscribe') {
+      await subscribeUser(interaction.user.id);
+      return await interaction.reply({
+        content: '✅ تم اشتراكك في الرسائل الخاصة الخاصة بالإدارة',
         ephemeral: true
       });
     }
 
-    if (sub === 'off') {
-      const disabled = await disableReminder(interaction.user.id);
-
-      return interaction.reply({
-        content: disabled ? '🛑 تم إيقاف التذكير الخاص' : '❌ ما عندك تذكير مفعل أصلًا',
+    if (interaction.commandName === 'unsubscribe') {
+      await unsubscribeUser(interaction.user.id);
+      return await interaction.reply({
+        content: '🛑 تم إلغاء اشتراكك من الرسائل الخاصة',
         ephemeral: true
       });
     }
 
-    if (sub === 'status') {
-      const reminder = await getReminder(interaction.user.id);
+    if (interaction.commandName === 'dmall') {
+      await interaction.deferReply({ ephemeral: true });
 
-      if (!reminder || !reminder.enabled) {
-        return interaction.reply({
-          content: '❌ التذكير الخاص غير مفعل لديك',
-          ephemeral: true
-        });
+      const message = interaction.options.getString('message');
+      const subscribers = await getSubscribedUsers();
+
+      if (!subscribers.length) {
+        return await interaction.editReply('❌ لا يوجد مشتركين حاليًا');
       }
 
-      return interaction.reply({
-        embeds: [
-          createEmbed({
-            title: '⏰ حالة التذكير الخاص',
-            fields: [
-              { name: 'الحالة', value: reminder.enabled ? 'مفعل' : 'متوقف', inline: true },
-              { name: 'كل كم دقيقة', value: `${reminder.interval_minutes}`, inline: true },
-              { name: 'التذكير القادم', value: new Date(reminder.next_reminder_at).toLocaleString('ar-SA'), inline: false }
-            ],
-            footer: 'Reminder Status'
-          })
-        ],
-        ephemeral: true
-      });
+      let success = 0;
+      let failed = 0;
+
+      for (const userId of subscribers) {
+        try {
+          const user = await client.users.fetch(userId);
+          await user.send(`📩 رسالة من إدارة السيرفر:\n\n${message}`);
+          success++;
+        } catch (error) {
+          failed++;
+        }
+      }
+
+      return await interaction.editReply(
+        `✅ تم الإرسال للمشتركين\n📬 نجح: ${success}\n❌ فشل: ${failed}`
+      );
     }
-  }
 
-  if (interaction.commandName === 'join') {
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
+    if (interaction.commandName === 'join') {
+      await interaction.deferReply({ ephemeral: true });
       await connectToVoice(interaction);
-      return interaction.editReply('🎧 دخلت الروم');
-    } catch (error) {
-      console.error('❌ خطأ join:', error);
-      return interaction.editReply('❌ ادخل روم صوتي أول');
-    }
-  }
-
-  if (interaction.commandName === 'leave') {
-    const connection = getVoiceConnection(interaction.guild.id);
-
-    if (!connection) {
-      return interaction.reply({
-        content: '❌ مو داخل روم',
-        ephemeral: true
-      });
+      return await interaction.editReply('🎧 دخلت الروم');
     }
 
-    const player = players.get(interaction.guild.id);
-    if (player) player.stop();
+    if (interaction.commandName === 'leave') {
+      const connection = getVoiceConnection(interaction.guild.id);
 
-    connection.destroy();
-    return interaction.reply('👋 طلعت من الروم');
-  }
+      if (!connection) {
+        return await interaction.reply({ content: '❌ مو داخل روم', ephemeral: true });
+      }
 
-  if (interaction.commandName === 'quran') {
-    await interaction.deferReply({ ephemeral: true });
+      const player = players.get(interaction.guild.id);
+      if (player) player.stop();
+      connection.destroy();
 
-    try {
+      return await interaction.reply('👋 طلعت من الروم');
+    }
+
+    if (interaction.commandName === 'quran') {
+      await interaction.deferReply({ ephemeral: true });
       const connection = await connectToVoice(interaction);
       const player = getOrCreatePlayer(interaction.guild.id);
 
-      const resource = createAudioResource(QURAN_URL, {
-        inlineVolume: true
-      });
-
-      if (resource.volume) {
-        resource.volume.setVolume(1);
-      }
+      const resource = createAudioResource(QURAN_URL, { inlineVolume: true });
+      if (resource.volume) resource.volume.setVolume(1);
 
       connection.subscribe(player);
       player.play(resource);
 
-      return interaction.editReply('📖 تم تشغيل القرآن');
-    } catch (error) {
-      console.error('❌ خطأ تشغيل القرآن:', error);
-      return interaction.editReply('❌ صار خطأ أثناء تشغيل القرآن');
-    }
-  }
-
-  if (interaction.commandName === 'stopquran') {
-    const player = players.get(interaction.guild.id);
-
-    if (!player) {
-      return interaction.reply({
-        content: '❌ ما فيه تشغيل حالي',
-        ephemeral: true
-      });
+      return await interaction.editReply('📖 تم تشغيل القرآن');
     }
 
-    player.stop();
-    return interaction.reply('⏹️ تم إيقاف القرآن');
-  }
+    if (interaction.commandName === 'stopquran') {
+      const player = players.get(interaction.guild.id);
 
-  if (interaction.commandName === 'ping') {
-    const apiPing = Math.round(client.ws.ping);
+      if (!player) {
+        return await interaction.reply({ content: '❌ ما فيه تشغيل حالي', ephemeral: true });
+      }
 
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+      player.stop();
+      return await interaction.reply('⏹️ تم إيقاف القرآن');
+    }
+
+    if (interaction.commandName === 'ping') {
+      const apiPing = Math.round(client.ws.ping);
+      return await interaction.reply({
+        embeds: [createEmbed({
           title: '🏓 سرعة البوت',
           fields: [
             { name: 'Ping', value: `\`${apiPing}ms\``, inline: true },
             { name: 'السيرفر', value: `${interaction.guild.name}`, inline: true }
           ],
           footer: 'Discord Bot'
-        })
-      ],
-      ephemeral: true
-    });
-  }
+        })],
+        ephemeral: true
+      });
+    }
 
-  if (interaction.commandName === 'avatar') {
-    const user = interaction.options.getUser('user') || interaction.user;
-
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+    if (interaction.commandName === 'avatar') {
+      const user = interaction.options.getUser('user') || interaction.user;
+      return await interaction.reply({
+        embeds: [createEmbed({
           title: `🖼️ صورة ${user.username}`,
           image: user.displayAvatarURL({ dynamic: true, size: 1024 }),
           footer: `Requested by ${interaction.user.username}`
-        })
-      ]
-    });
-  }
+        })]
+      });
+    }
 
-  if (interaction.commandName === 'userinfo') {
-    const user = interaction.options.getUser('user') || interaction.user;
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-    const count = await getUserCount(user.id);
-    const rank = getRankByCount(count);
+    if (interaction.commandName === 'userinfo') {
+      await interaction.deferReply();
+      const user = interaction.options.getUser('user') || interaction.user;
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      const count = await getUserCount(user.id);
+      const rank = getRankByCount(count);
 
-    const roles = member
-      ? member.roles.cache
-          .filter(role => role.id !== interaction.guild.id)
-          .map(role => role.toString())
-          .slice(0, 10)
-          .join(' ، ') || 'لا توجد رتب'
-      : 'غير متوفر';
+      const roles = member
+        ? member.roles.cache
+            .filter(role => role.id !== interaction.guild.id)
+            .map(role => role.toString())
+            .slice(0, 10)
+            .join(' ، ') || 'لا توجد رتب'
+        : 'غير متوفر';
 
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+      return await interaction.editReply({
+        embeds: [createEmbed({
           title: '👤 معلومات العضو',
           thumbnail: user.displayAvatarURL({ dynamic: true, size: 1024 }),
           fields: [
@@ -1035,71 +821,68 @@ client.on('interactionCreate', async (interaction) => {
             { name: 'الرتب', value: roles, inline: false }
           ],
           footer: 'User Info'
-        })
-      ]
-    });
-  }
+        })]
+      });
+    }
 
-  if (interaction.commandName === 'server') {
-    const guild = interaction.guild;
-
-    return interaction.reply({
-      embeds: [
-        createEmbed({
+    if (interaction.commandName === 'server') {
+      return await interaction.reply({
+        embeds: [createEmbed({
           title: '🟢 معلومات السيرفر',
-          thumbnail: guild.iconURL({ dynamic: true, size: 1024 }) || null,
+          thumbnail: interaction.guild.iconURL({ dynamic: true, size: 1024 }) || null,
           fields: [
-            { name: 'اسم السيرفر', value: guild.name, inline: true },
-            { name: 'آيدي السيرفر', value: guild.id, inline: true },
-            { name: 'المالك', value: `<@${guild.ownerId}>`, inline: true },
-            { name: 'عدد الأعضاء', value: `${guild.memberCount}`, inline: true },
-            { name: 'عدد الرومات', value: `${guild.channels.cache.size}`, inline: true },
-            { name: 'تاريخ الإنشاء', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:F>`, inline: false }
+            { name: 'اسم السيرفر', value: interaction.guild.name, inline: true },
+            { name: 'آيدي السيرفر', value: interaction.guild.id, inline: true },
+            { name: 'المالك', value: `<@${interaction.guild.ownerId}>`, inline: true },
+            { name: 'عدد الأعضاء', value: `${interaction.guild.memberCount}`, inline: true },
+            { name: 'عدد الرومات', value: `${interaction.guild.channels.cache.size}`, inline: true },
+            { name: 'تاريخ الإنشاء', value: `<t:${Math.floor(interaction.guild.createdTimestamp / 1000)}:F>`, inline: false }
           ],
           footer: 'Server Info'
-        })
-      ]
-    });
-  }
-
-  if (interaction.commandName === 'suggest') {
-    const text = interaction.options.getString('text');
-
-    if (!process.env.SUGGEST_CHANNEL_ID) {
-      return interaction.reply({
-        content: '❌ روم الاقتراحات غير مضبوط في المتغيرات',
-        ephemeral: true
+        })]
       });
     }
 
-    const suggestChannel = await interaction.guild.channels.fetch(process.env.SUGGEST_CHANNEL_ID).catch(() => null);
+    if (interaction.commandName === 'suggest') {
+      await interaction.deferReply({ ephemeral: true });
+      const text = interaction.options.getString('text');
 
-    if (!suggestChannel) {
-      return interaction.reply({
-        content: '❌ ما قدرت أوصل لروم الاقتراحات',
-        ephemeral: true
+      if (!process.env.SUGGEST_CHANNEL_ID) {
+        return await interaction.editReply('❌ روم الاقتراحات غير مضبوط في المتغيرات');
+      }
+
+      const suggestChannel = await interaction.guild.channels.fetch(process.env.SUGGEST_CHANNEL_ID).catch(() => null);
+      if (!suggestChannel) {
+        return await interaction.editReply('❌ ما قدرت أوصل لروم الاقتراحات');
+      }
+
+      const embed = createEmbed({
+        title: '📩 اقتراح جديد',
+        description: text,
+        fields: [
+          { name: 'صاحب الاقتراح', value: `${interaction.user}`, inline: true },
+          { name: 'الآيدي', value: `${interaction.user.id}`, inline: true }
+        ],
+        thumbnail: interaction.user.displayAvatarURL({ dynamic: true, size: 1024 }),
+        footer: 'Suggestion System'
       });
+
+      const msg = await suggestChannel.send({ embeds: [embed] });
+      await msg.react('👍').catch(() => null);
+      await msg.react('👎').catch(() => null);
+
+      return await interaction.editReply('✅ تم إرسال اقتراحك بنجاح');
     }
+  } catch (error) {
+    console.error('❌ خطأ داخل interactionCreate:', error);
 
-    const embed = createEmbed({
-      title: '📩 اقتراح جديد',
-      description: text,
-      fields: [
-        { name: 'صاحب الاقتراح', value: `${interaction.user}`, inline: true },
-        { name: 'الآيدي', value: `${interaction.user.id}`, inline: true }
-      ],
-      thumbnail: interaction.user.displayAvatarURL({ dynamic: true, size: 1024 }),
-      footer: 'Suggestion System'
-    });
-
-    const msg = await suggestChannel.send({ embeds: [embed] });
-    await msg.react('👍').catch(() => null);
-    await msg.react('👎').catch(() => null);
-
-    return interaction.reply({
-      content: '✅ تم إرسال اقتراحك بنجاح',
-      ephemeral: true
-    });
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply('❌ صار خطأ أثناء تنفيذ الأمر');
+      } else {
+        await interaction.reply({ content: '❌ صار خطأ أثناء تنفيذ الأمر', ephemeral: true });
+      }
+    } catch (_) {}
   }
 });
 
