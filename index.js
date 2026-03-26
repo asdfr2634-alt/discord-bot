@@ -20,6 +20,7 @@ const {
   VoiceConnectionStatus,
   AudioPlayerStatus
 } = require('@discordjs/voice');
+const { Pool } = require('pg');
 
 const client = new Client({
   intents: [
@@ -31,6 +32,15 @@ const client = new Client({
 });
 
 const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+pool.on('error', (err) => {
+  console.error('❌ PostgreSQL pool error:', err);
+});
 
 const adhkar = [
   'سبحان الله',
@@ -50,34 +60,152 @@ const adhkar = [
   'اللهم إني أسألك الجنة وأعوذ بك من النار',
   'اللهم اجعل القرآن ربيع قلبي ونور صدري',
   'اللهم إني أعوذ بك من الهم والحزن',
-  'اللهم ارزقني حسن الخاتمة'
+  'اللهم ارزقني حسن الخاتمة',
+  'سبحان الله عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته',
+  'رضيت بالله ربًا وبالإسلام دينًا وبمحمد ﷺ نبيًا',
+  'اللهم اغفر لي ذنبي كله دقه وجله وأوله وآخره',
+  'اللهم إني أسألك الهدى والتقى والعفاف والغنى',
+  'اللهم أصلح لي ديني الذي هو عصمة أمري',
+  'اللهم أصلح لي دنياي التي فيها معاشي',
+  'اللهم أصلح لي آخرتي التي إليها معادي',
+  'اللهم اجعل الحياة زيادة لي في كل خير',
+  'اللهم اجعل الموت راحة لي من كل شر',
+  'يا حي يا قيوم برحمتك أستغيث',
+  'اللهم اكفني بحلالك عن حرامك وأغنني بفضلك عمن سواك',
+  'اللهم إني أعوذ بك من العجز والكسل',
+  'اللهم إني أعوذ بك من الجبن والبخل',
+  'اللهم إني أعوذ بك من غلبة الدين وقهر الرجال',
+  'رب اغفر لي وتب علي إنك أنت التواب الرحيم',
+  'ربنا آتنا من لدنك رحمة وهيئ لنا من أمرنا رشدًا',
+  'رب اشرح لي صدري ويسر لي أمري',
+  'رب زدني علمًا',
+  'اللهم ثبت قلبي على دينك',
+  'اللهم مصرف القلوب صرف قلبي على طاعتك',
+  'لا إله إلا أنت سبحانك إني كنت من الظالمين',
+  'أعوذ بكلمات الله التامات من شر ما خلق',
+  'بسم الله الذي لا يضر مع اسمه شيء في الأرض ولا في السماء وهو السميع العليم',
+  'اللهم إني أسألك العفو والعافية في الدنيا والآخرة',
+  'اللهم متعني بسمعي وبصري واجعلهما الوارث مني',
+  'اللهم إني أسألك من خير ما سألك منه نبيك محمد ﷺ',
+  'وأعوذ بك من شر ما استعاذ منه نبيك محمد ﷺ',
+  'اللهم إني أسألك الثبات في الأمر والعزيمة على الرشد',
+  'اللهم إني أسألك قلبًا سليمًا ولسانًا صادقًا',
+  'اللهم اجعلني لك شاكرًا لك ذاكرًا لك راهبًا لك مطواعًا',
+  'اللهم تقبل توبتي واغسل حوبتي وأجب دعوتي',
+  'اللهم احفظني من بين يدي ومن خلفي وعن يميني وعن شمالي',
+  'اللهم إني أعوذ بعظمتك أن أغتال من تحتي'
 ];
+
+const players = new Map();
 
 function randomZekr() {
   return adhkar[Math.floor(Math.random() * adhkar.length)];
 }
 
-function createZekrEmbed() {
+async function initDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bot_stats (
+      key TEXT PRIMARY KEY,
+      value BIGINT NOT NULL DEFAULT 0
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_zekr_counts (
+      user_id TEXT PRIMARY KEY,
+      count BIGINT NOT NULL DEFAULT 0
+    );
+  `);
+
+  await pool.query(`
+    INSERT INTO bot_stats (key, value)
+    VALUES ('global_zekr_total', 0)
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  console.log('✅ تم تجهيز قاعدة البيانات');
+}
+
+async function getGlobalTotal() {
+  const result = await pool.query(
+    'SELECT value FROM bot_stats WHERE key = $1',
+    ['global_zekr_total']
+  );
+
+  if (!result.rows.length) return 0;
+  return Number(result.rows[0].value || 0);
+}
+
+async function increaseGlobalTotal() {
+  const result = await pool.query(
+    `
+      INSERT INTO bot_stats (key, value)
+      VALUES ($1, 1)
+      ON CONFLICT (key)
+      DO UPDATE SET value = bot_stats.value + 1
+      RETURNING value
+    `,
+    ['global_zekr_total']
+  );
+
+  return Number(result.rows[0].value || 0);
+}
+
+async function getUserCount(userId) {
+  const result = await pool.query(
+    'SELECT count FROM user_zekr_counts WHERE user_id = $1',
+    [userId]
+  );
+
+  if (!result.rows.length) return 0;
+  return Number(result.rows[0].count || 0);
+}
+
+async function increaseUserCount(userId) {
+  const result = await pool.query(
+    `
+      INSERT INTO user_zekr_counts (user_id, count)
+      VALUES ($1, 1)
+      ON CONFLICT (user_id)
+      DO UPDATE SET count = user_zekr_counts.count + 1
+      RETURNING count
+    `,
+    [userId]
+  );
+
+  return Number(result.rows[0].count || 0);
+}
+
+async function createZekrEmbed(selectedZekr = randomZekr()) {
+  const globalTotal = await getGlobalTotal();
+
   return new EmbedBuilder()
     .setColor('#0F9D9A')
     .setAuthor({ name: 'نظام الأذكار' })
     .setTitle('📿 ذكر')
-    .setDescription(`╭・${randomZekr()}\n╰・اذكر الله واطمئن قلبك`)
+    .setDescription(`╭・${selectedZekr}\n╰・اذكر الله واطمئن قلبك`)
     .addFields(
       { name: 'الفضل', value: 'الذكر نور للقلب وطمأنينة للنفس', inline: false },
-      { name: 'تنبيه', value: 'أكثروا من الصلاة على النبي ﷺ', inline: false }
+      { name: 'تنبيه', value: 'أكثروا من الصلاة على النبي ﷺ', inline: false },
+      { name: 'العداد العام', value: `${globalTotal}`, inline: true },
+      { name: 'عدد الأذكار المتاحة', value: `${adhkar.length}`, inline: true }
     )
     .setFooter({ text: 'أذكار تلقائية • Discord Bot' })
     .setTimestamp();
 }
 
-function createZekrButtonRow() {
+function createZekrButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('new_zekr')
       .setLabel('ذكر جديد')
-      .setEmoji('📿')
-      .setStyle(ButtonStyle.Primary)
+      .setEmoji('🔄')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('count_zekr')
+      .setLabel('ذكرت')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
   );
 }
 
@@ -99,7 +227,7 @@ function createEmbed({ title, description, fields = [], footer = null, image = n
 const commands = [
   new SlashCommandBuilder()
     .setName('zekr')
-    .setDescription('يرسل ذكرًا جميلًا'),
+    .setDescription('يرسل ذكرًا جميلًا مع أزرار'),
 
   new SlashCommandBuilder()
     .setName('join')
@@ -125,8 +253,7 @@ const commands = [
     .setName('avatar')
     .setDescription('يعرض صورة العضو')
     .addUserOption(option =>
-      option
-        .setName('user')
+      option.setName('user')
         .setDescription('العضو المطلوب')
         .setRequired(false)
     ),
@@ -135,8 +262,7 @@ const commands = [
     .setName('userinfo')
     .setDescription('يعرض معلومات العضو')
     .addUserOption(option =>
-      option
-        .setName('user')
+      option.setName('user')
         .setDescription('العضو المطلوب')
         .setRequired(false)
     ),
@@ -149,8 +275,7 @@ const commands = [
     .setName('suggest')
     .setDescription('إرسال اقتراح')
     .addStringOption(option =>
-      option
-        .setName('text')
+      option.setName('text')
         .setDescription('اكتب اقتراحك')
         .setRequired(true)
     )
@@ -174,8 +299,6 @@ async function registerSlashCommands() {
     console.error('❌ خطأ في تسجيل أوامر السلاش:', error);
   }
 }
-
-const players = new Map();
 
 function getOrCreatePlayer(guildId) {
   if (!players.has(guildId)) {
@@ -225,11 +348,24 @@ async function connectToVoice(interaction) {
   return connection;
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`🔥 Logged in as ${client.user.tag}`);
 
   if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
-    console.error('❌ تأكد من متغيرات البيئة: TOKEN / CLIENT_ID / GUILD_ID');
+    console.error('❌ تأكد من TOKEN / CLIENT_ID / GUILD_ID');
+    return;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL غير موجود');
+    return;
+  }
+
+  try {
+    await initDatabase();
+    console.log(`📿 العداد العام الحالي: ${await getGlobalTotal()}`);
+  } catch (error) {
+    console.error('❌ خطأ في تهيئة قاعدة البيانات:', error);
     return;
   }
 
@@ -240,9 +376,10 @@ client.once('ready', async () => {
       if (!process.env.AZKAR_CHANNEL_ID) return;
       const channel = await client.channels.fetch(process.env.AZKAR_CHANNEL_ID).catch(() => null);
       if (!channel) return;
+
       await channel.send({
-        embeds: [createZekrEmbed()],
-        components: [createZekrButtonRow()]
+        embeds: [await createZekrEmbed()],
+        components: [createZekrButtons()]
       });
     } catch (error) {
       console.error('❌ خطأ في إرسال الذكر:', error);
@@ -280,13 +417,35 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.customId === 'new_zekr') {
       try {
         return await interaction.update({
-          embeds: [createZekrEmbed()],
-          components: [createZekrButtonRow()]
+          embeds: [await createZekrEmbed()],
+          components: [createZekrButtons()]
         });
       } catch (error) {
-        console.error('❌ خطأ زر الذكر الجديد:', error);
+        console.error('❌ خطأ زر ذكر جديد:', error);
       }
+      return;
     }
+
+    if (interaction.customId === 'count_zekr') {
+      try {
+        const personalCount = await increaseUserCount(interaction.user.id);
+        const totalCount = await increaseGlobalTotal();
+
+        await interaction.update({
+          embeds: [await createZekrEmbed()],
+          components: [createZekrButtons()]
+        });
+
+        return await interaction.followUp({
+          content: `✅ تم احتسابها لك\n📿 عدد مرات ذكرك: ${personalCount}\n🌍 العداد العام: ${totalCount}`,
+          ephemeral: true
+        });
+      } catch (error) {
+        console.error('❌ خطأ زر ذكرت:', error);
+      }
+      return;
+    }
+
     return;
   }
 
@@ -294,8 +453,8 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.commandName === 'zekr') {
     return interaction.reply({
-      embeds: [createZekrEmbed()],
-      components: [createZekrButtonRow()]
+      embeds: [await createZekrEmbed()],
+      components: [createZekrButtons()]
     });
   }
 
