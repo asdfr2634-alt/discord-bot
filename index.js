@@ -716,7 +716,19 @@ client.on('interactionCreate', async (interaction) => {
       for (const userId of subscribers) {
         try {
           const user = await client.users.fetch(userId);
-          await user.send(`📩 رسالة من إدارة السيرفر:\n\n${message}`);
+         const embed = new EmbedBuilder()
+  .setColor('#0F9D9A')
+  .setAuthor({
+    name: 'إدارة السيرفر',
+    iconURL: interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
+  })
+  .setTitle('📩 رسالة إدارية')
+  .setDescription(`📌 **محتوى الرسالة:**\n${message}`)
+  .setThumbnail(interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL())
+  .setFooter({ text: 'Time Dosn System' })
+  .setTimestamp();
+
+await user.send({ embeds: [embed] });
           success++;
         } catch (error) {
           failed++;
