@@ -6,7 +6,9 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  PermissionFlagsBits
+  ButtonBuilder,
+  ButtonStyle,
+  ActionRowBuilder
 } = require('discord.js');
 const {
   joinVoiceChannel,
@@ -67,6 +69,16 @@ function createZekrEmbed() {
     )
     .setFooter({ text: 'أذكار تلقائية • Discord Bot' })
     .setTimestamp();
+}
+
+function createZekrButtonRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('new_zekr')
+      .setLabel('ذكر جديد')
+      .setEmoji('📿')
+      .setStyle(ButtonStyle.Primary)
+  );
 }
 
 function createEmbed({ title, description, fields = [], footer = null, image = null, thumbnail = null }) {
@@ -228,7 +240,10 @@ client.once('ready', async () => {
       if (!process.env.AZKAR_CHANNEL_ID) return;
       const channel = await client.channels.fetch(process.env.AZKAR_CHANNEL_ID).catch(() => null);
       if (!channel) return;
-      await channel.send({ embeds: [createZekrEmbed()] });
+      await channel.send({
+        embeds: [createZekrEmbed()],
+        components: [createZekrButtonRow()]
+      });
     } catch (error) {
       console.error('❌ خطأ في إرسال الذكر:', error);
     }
@@ -261,10 +276,27 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
+  if (interaction.isButton()) {
+    if (interaction.customId === 'new_zekr') {
+      try {
+        return await interaction.update({
+          embeds: [createZekrEmbed()],
+          components: [createZekrButtonRow()]
+        });
+      } catch (error) {
+        console.error('❌ خطأ زر الذكر الجديد:', error);
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'zekr') {
-    return interaction.reply({ embeds: [createZekrEmbed()] });
+    return interaction.reply({
+      embeds: [createZekrEmbed()],
+      components: [createZekrButtonRow()]
+    });
   }
 
   if (interaction.commandName === 'join') {
