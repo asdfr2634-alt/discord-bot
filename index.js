@@ -36,6 +36,15 @@ const client = new Client({
 const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
 const DAILY_GOAL = Number(process.env.DAILY_GOAL || 1000);
 
+// 🔒 الرتب المسموح لها للأوامر المحمية
+const ALLOWED_ROLES = [
+  '1462992022486126644',
+  '1463355611621101715'
+];
+
+// 🛡️ الأوامر المحمية فقط
+const protectedCommands = ['ping', 'leave', 'dmall'];
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
@@ -126,6 +135,60 @@ function getRankByCount(count) {
 
 function getNextRank(count) {
   return rankTiers.find((tier) => tier.min > count) || null;
+}
+
+function createEmbed({ title, description, fields = [], footer = null, image = null, thumbnail = null, color = '#0F9D9A' }) {
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(title)
+    .setDescription(description || null)
+    .setTimestamp();
+
+  if (fields.length) embed.addFields(fields);
+  if (footer) embed.setFooter({ text: footer });
+  if (image) embed.setImage(image);
+  if (thumbnail) embed.setThumbnail(thumbnail);
+
+  return embed;
+}
+
+async function sendPermissionLog(interaction) {
+  try {
+    if (!process.env.LOG_CHANNEL_ID) return;
+
+    const logChannel = await interaction.guild.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
+    if (!logChannel) return;
+
+    const logEmbed = new EmbedBuilder()
+      .setColor('#ED4245')
+      .setTitle('🚨 محاولة استخدام أمر محمي')
+      .setDescription('تم رصد محاولة استخدام أمر بدون صلاحية')
+      .addFields(
+        { name: 'العضو', value: `${interaction.user} (${interaction.user.tag})`, inline: false },
+        { name: 'آيدي العضو', value: interaction.user.id, inline: true },
+        { name: 'الأمر', value: `/${interaction.commandName}`, inline: true },
+        { name: 'السيرفر', value: interaction.guild.name, inline: true }
+      )
+      .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 1024 }))
+      .setFooter({ text: 'Protection Logs' })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [logEmbed] });
+  } catch (error) {
+    console.error('❌ خطأ في إرسال اللوق:', error);
+  }
+}
+
+function createDeniedEmbed() {
+  return new EmbedBuilder()
+    .setColor('#ED4245')
+    .setTitle('🚫 رفض الوصول')
+    .setDescription('ليس لديك الصلاحية لاستخدام هذا الأمر.')
+    .addFields(
+      { name: 'ملاحظة', value: 'هذا الأمر مخصص لرتب إدارية محددة فقط.', inline: false }
+    )
+    .setFooter({ text: 'نظام الحماية' })
+    .setTimestamp();
 }
 
 async function initDatabase() {
@@ -333,21 +396,6 @@ function createZekrButtons() {
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success)
   );
-}
-
-function createEmbed({ title, description, fields = [], footer = null, image = null, thumbnail = null }) {
-  const embed = new EmbedBuilder()
-    .setColor('#0F9D9A')
-    .setTitle(title)
-    .setDescription(description || null)
-    .setTimestamp();
-
-  if (fields.length) embed.addFields(fields);
-  if (footer) embed.setFooter({ text: footer });
-  if (image) embed.setImage(image);
-  if (thumbnail) embed.setThumbnail(thumbnail);
-
-  return embed;
 }
 
 const commands = [
@@ -601,6 +649,20 @@ client.on('interactionCreate', async (interaction) => {
 
     if (!interaction.isChatInputCommand()) return;
 
+    // 🔒 حماية الأوامر المحددة
+    if (protectedCommands.includes(interaction.commandName)) {
+      const member = interaction.member;
+      const hasPermission = member.roles.cache.some(role => ALLOWED_ROLES.includes(role.id));
+
+      if (!hasPermission) {
+        await sendPermissionLog(interaction);
+        return await interaction.reply({
+          embeds: [createDeniedEmbed()],
+          ephemeral: true
+        });
+      }
+    }
+
     if (interaction.commandName === 'zekr') {
       await interaction.deferReply();
       return await interaction.editReply({
@@ -716,19 +778,22 @@ client.on('interactionCreate', async (interaction) => {
       for (const userId of subscribers) {
         try {
           const user = await client.users.fetch(userId);
-         const embed = new EmbedBuilder()
-  .setColor('#0F9D9A')
-  .setAuthor({
-    name: 'Time Dosn',
-    iconURL: interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
-  })
-  .setTitle('📩 رسالة دينية')
-  .setDescription(`📌 **محتوى الرسالة:**\n${message}`)
-  .setThumbnail(interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL())
-  .setFooter({ text: 'Time Dosn System' })
-  .setTimestamp();
 
-await user.send({ embeds: [embed] });
+          const embed = new EmbedBuilder()
+            .setColor('#0F9D9A')
+            .setAuthor({
+              name: 'إدارة السيرفر',
+              iconURL: interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
+            })
+            .setTitle('📩 رسالة إدارية')
+            .setDescription(`📌 **محتوى الرسالة:**\n${message}`)
+            .setThumbnail(
+              interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
+            )
+            .setFooter({ text: 'Time Dosn System' })
+            .setTimestamp();
+
+          await user.send({ embeds: [embed] });
           success++;
         } catch (error) {
           failed++;
