@@ -137,7 +137,15 @@ function getNextRank(count) {
   return rankTiers.find((tier) => tier.min > count) || null;
 }
 
-function createEmbed({ title, description, fields = [], footer = null, image = null, thumbnail = null, color = '#0F9D9A' }) {
+function createEmbed({
+  title,
+  description,
+  fields = [],
+  footer = null,
+  image = null,
+  thumbnail = null,
+  color = '#0F9D9A'
+}) {
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
@@ -150,6 +158,41 @@ function createEmbed({ title, description, fields = [], footer = null, image = n
   if (thumbnail) embed.setThumbnail(thumbnail);
 
   return embed;
+}
+
+function createDmReadButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('dm_seen')
+      .setLabel('تم الاطلاع')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+  );
+}
+
+async function sendDmReadLog(user) {
+  try {
+    if (!process.env.LOG_CHANNEL_ID) return;
+
+    const logChannel = await client.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
+    if (!logChannel) return;
+
+    const embed = new EmbedBuilder()
+      .setColor('#57F287')
+      .setTitle('✅ تم الاطلاع على رسالة DM')
+      .setDescription('أحد المشتركين اطّلع على الرسالة الإدارية')
+      .addFields(
+        { name: 'العضو', value: `${user} (${user.tag})`, inline: false },
+        { name: 'آيدي العضو', value: user.id, inline: true }
+      )
+      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 1024 }))
+      .setFooter({ text: 'DM Read Logs' })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error('❌ خطأ في لوق تم الاطلاع:', error);
+  }
 }
 
 async function sendPermissionLog(interaction) {
@@ -644,6 +687,23 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
+      if (interaction.customId === 'dm_seen') {
+        const disabledRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('dm_seen_done')
+            .setLabel('تم الاطلاع ✅')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true)
+        );
+
+        await interaction.update({
+          components: [disabledRow]
+        });
+
+        await sendDmReadLog(interaction.user);
+        return;
+      }
+
       return;
     }
 
@@ -793,7 +853,11 @@ client.on('interactionCreate', async (interaction) => {
             .setFooter({ text: 'Time Dosn System' })
             .setTimestamp();
 
-          await user.send({ embeds: [embed] });
+          await user.send({
+            embeds: [embed],
+            components: [createDmReadButtons()]
+          });
+
           success++;
         } catch (error) {
           failed++;
