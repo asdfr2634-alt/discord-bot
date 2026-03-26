@@ -27,11 +27,14 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages
   ]
 });
 
 const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
+const DAILY_GOAL = Number(process.env.DAILY_GOAL || 1000);
+const REMINDER_CHECK_INTERVAL_MS = 60 * 1000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -93,10 +96,61 @@ const adhkar = [
   'اللهم اجعلني لك شاكرًا لك ذاكرًا لك راهبًا لك مطواعًا',
   'اللهم تقبل توبتي واغسل حوبتي وأجب دعوتي',
   'اللهم احفظني من بين يدي ومن خلفي وعن يميني وعن شمالي',
-  'اللهم إني أعوذ بعظمتك أن أغتال من تحتي'
+  'اللهم إني أعوذ بعظمتك أن أغتال من تحتي',
+  'اللهم إني أعوذ بك من زوال نعمتك وتحول عافيتك',
+  'اللهم إني أسألك اليسر بعد العسر',
+  'اللهم فرج همي ويسر أمري',
+  'اللهم ارزقني من حيث لا أحتسب',
+  'اللهم بارك لي في وقتي وعملي ومالي',
+  'اللهم اجعلني من الذاكرين الشاكرين',
+  'اللهم اجعل آخر كلامي من الدنيا لا إله إلا الله',
+  'اللهم انفعني بما علمتني وعلمني ما ينفعني',
+  'ربنا تقبل منا إنك أنت السميع العليم',
+  'ربنا اغفر لنا ولوالدينا ولجميع المسلمين',
+  'اللهم استرني فوق الأرض وتحت الأرض ويوم العرض'
 ];
 
 const players = new Map();
+
+const rankTiers = [
+  { name: 'مبتدئ', min: 0 },
+  { name: 'نشيط', min: 50 },
+  { name: 'ذاكر', min: 150 },
+  { name: 'مثابر', min: 300 },
+  { name: 'قدوة', min: 600 },
+  { name: 'أسطورة الذكر', min: 1000 }
+];
+
+function getTodayRiyadh() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+
+  const year = parts.find(p => p.type === 'year').value;
+  const month = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+
+  return `${year}-${month}-${day}`;
+}
+
+function getRankByCount(count) {
+  let currentRank = rankTiers[0];
+
+  for (const tier of rankTiers) {
+    if (count >= tier.min) {
+      currentRank = tier;
+    }
+  }
+
+  return currentRank;
+}
+
+function getNextRank(count) {
+  return rankTiers.find(tier => tier.min > count) || null;
+}
 
 function randomZekr() {
   return adhkar[Math.floor(Math.random() * adhkar.length)];
@@ -118,22 +172,79 @@ async function initDatabase() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_reminders (
+      user_id TEXT PRIMARY KEY,
+      interval_minutes INTEGER NOT NULL,
+      next_reminder_at TIMESTAMPTZ NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE
+    );
+  `);
+
+  await pool.query(`
     INSERT INTO bot_stats (key, value)
-    VALUES ('global_zekr_total', 0)
+    VALUES 
+      ('global_zekr_total', 0),
+      ('daily_zekr_total', 0)
     ON CONFLICT (key) DO NOTHING;
   `);
+
+  await pool.query(`
+    INSERT INTO bot_stats (key, value)
+    VALUES ('daily_zekr_date', 0)
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  await setDailyDateIfMissing();
+  await ensureDailyChallengeFresh();
 
   console.log('✅ تم تجهيز قاعدة البيانات');
 }
 
-async function getGlobalTotal() {
+async function getStat(key, defaultValue = 0) {
   const result = await pool.query(
     'SELECT value FROM bot_stats WHERE key = $1',
-    ['global_zekr_total']
+    [key]
   );
 
-  if (!result.rows.length) return 0;
-  return Number(result.rows[0].value || 0);
+  if (!result.rows.length) return defaultValue;
+  return result.rows[0].value;
+}
+
+async function setStat(key, value) {
+  await pool.query(
+    `
+      INSERT INTO bot_stats (key, value)
+      VALUES ($1, $2)
+      ON CONFLICT (key)
+      DO UPDATE SET value = EXCLUDED.value
+    `,
+    [key, value]
+  );
+}
+
+async function setDailyDateIfMissing() {
+  const today = getTodayRiyadh();
+  const current = await getStat('daily_zekr_date', null);
+
+  if (!current || current === '0') {
+    await setStat('daily_zekr_date', today);
+  }
+}
+
+async function ensureDailyChallengeFresh() {
+  const today = getTodayRiyadh();
+  const currentDate = await getStat('daily_zekr_date', today);
+
+  if (currentDate !== today) {
+    await setStat('daily_zekr_date', today);
+    await setStat('daily_zekr_total', 0);
+    console.log(`🔄 تم تصفير التحدي اليومي لليوم الجديد: ${today}`);
+  }
+}
+
+async function getGlobalTotal() {
+  const value = await getStat('global_zekr_total', 0);
+  return Number(value || 0);
 }
 
 async function increaseGlobalTotal() {
@@ -146,6 +257,29 @@ async function increaseGlobalTotal() {
       RETURNING value
     `,
     ['global_zekr_total']
+  );
+
+  return Number(result.rows[0].value || 0);
+}
+
+async function getDailyTotal() {
+  await ensureDailyChallengeFresh();
+  const value = await getStat('daily_zekr_total', 0);
+  return Number(value || 0);
+}
+
+async function increaseDailyTotal() {
+  await ensureDailyChallengeFresh();
+
+  const result = await pool.query(
+    `
+      INSERT INTO bot_stats (key, value)
+      VALUES ($1, 1)
+      ON CONFLICT (key)
+      DO UPDATE SET value = bot_stats.value + 1
+      RETURNING value
+    `,
+    ['daily_zekr_total']
   );
 
   return Number(result.rows[0].value || 0);
@@ -176,8 +310,115 @@ async function increaseUserCount(userId) {
   return Number(result.rows[0].count || 0);
 }
 
+async function getTopUsers(limit = 10) {
+  const result = await pool.query(
+    `
+      SELECT user_id, count
+      FROM user_zekr_counts
+      ORDER BY count DESC, user_id ASC
+      LIMIT $1
+    `,
+    [limit]
+  );
+
+  return result.rows.map(row => ({
+    userId: row.user_id,
+    count: Number(row.count)
+  }));
+}
+
+async function setReminder(userId, minutes) {
+  const result = await pool.query(
+    `
+      INSERT INTO user_reminders (user_id, interval_minutes, next_reminder_at, enabled)
+      VALUES ($1, $2, NOW() + ($2 || ' minutes')::interval, TRUE)
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        interval_minutes = EXCLUDED.interval_minutes,
+        next_reminder_at = EXCLUDED.next_reminder_at,
+        enabled = TRUE
+      RETURNING interval_minutes, next_reminder_at, enabled
+    `,
+    [userId, minutes]
+  );
+
+  return result.rows[0];
+}
+
+async function disableReminder(userId) {
+  const result = await pool.query(
+    `
+      UPDATE user_reminders
+      SET enabled = FALSE
+      WHERE user_id = $1
+      RETURNING user_id
+    `,
+    [userId]
+  );
+
+  return result.rowCount > 0;
+}
+
+async function getReminder(userId) {
+  const result = await pool.query(
+    `
+      SELECT user_id, interval_minutes, next_reminder_at, enabled
+      FROM user_reminders
+      WHERE user_id = $1
+    `,
+    [userId]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function processDueReminders() {
+  try {
+    const result = await pool.query(
+      `
+        SELECT user_id, interval_minutes
+        FROM user_reminders
+        WHERE enabled = TRUE
+          AND next_reminder_at <= NOW()
+        ORDER BY next_reminder_at ASC
+        LIMIT 25
+      `
+    );
+
+    for (const row of result.rows) {
+      const userId = row.user_id;
+      const intervalMinutes = Number(row.interval_minutes);
+
+      try {
+        const user = await client.users.fetch(userId);
+        if (user) {
+          await user.send('📿 تذكير لطيف: لا تنسَ الذكر والصلاة على النبي ﷺ');
+        }
+      } catch (error) {
+        console.error(`❌ تعذر إرسال DM للمستخدم ${userId}:`, error.message);
+      }
+
+      try {
+        await pool.query(
+          `
+            UPDATE user_reminders
+            SET next_reminder_at = NOW() + ($2 || ' minutes')::interval
+            WHERE user_id = $1
+          `,
+          [userId, intervalMinutes]
+        );
+      } catch (error) {
+        console.error(`❌ خطأ تحديث موعد التذكير للمستخدم ${userId}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('❌ خطأ في معالجة التذكيرات:', error);
+  }
+}
+
 async function createZekrEmbed(selectedZekr = randomZekr()) {
   const globalTotal = await getGlobalTotal();
+  const dailyTotal = await getDailyTotal();
 
   return new EmbedBuilder()
     .setColor('#0F9D9A')
@@ -188,6 +429,7 @@ async function createZekrEmbed(selectedZekr = randomZekr()) {
       { name: 'الفضل', value: 'الذكر نور للقلب وطمأنينة للنفس', inline: false },
       { name: 'تنبيه', value: 'أكثروا من الصلاة على النبي ﷺ', inline: false },
       { name: 'العداد العام', value: `${globalTotal}`, inline: true },
+      { name: 'عداد اليوم', value: `${dailyTotal}/${DAILY_GOAL}`, inline: true },
       { name: 'عدد الأذكار المتاحة', value: `${adhkar.length}`, inline: true }
     )
     .setFooter({ text: 'أذكار تلقائية • Discord Bot' })
@@ -228,6 +470,53 @@ const commands = [
   new SlashCommandBuilder()
     .setName('zekr')
     .setDescription('يرسل ذكرًا جميلًا مع أزرار'),
+
+  new SlashCommandBuilder()
+    .setName('rank')
+    .setDescription('يعرض رتبتك وعدد أذكارك')
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('العضو المطلوب')
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('top')
+    .setDescription('يعرض أكثر 10 أعضاء ذكرًا'),
+
+  new SlashCommandBuilder()
+    .setName('challenge')
+    .setDescription('يعرض التحدي اليومي'),
+
+  new SlashCommandBuilder()
+    .setName('reminder')
+    .setDescription('إعداد التذكير الخاص')
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('set')
+        .setDescription('تشغيل التذكير الخاص')
+        .addIntegerOption(option =>
+          option.setName('minutes')
+            .setDescription('كل كم دقيقة يوصلك تذكير')
+            .setRequired(true)
+            .addChoices(
+              { name: 'كل 10 دقائق', value: 10 },
+              { name: 'كل 30 دقيقة', value: 30 },
+              { name: 'كل 60 دقيقة', value: 60 },
+              { name: 'كل 120 دقيقة', value: 120 }
+            )
+        )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('off')
+        .setDescription('إيقاف التذكير الخاص')
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('status')
+        .setDescription('عرض حالة التذكير الخاص')
+    ),
 
   new SlashCommandBuilder()
     .setName('join')
@@ -364,6 +653,7 @@ client.once('clientReady', async () => {
   try {
     await initDatabase();
     console.log(`📿 العداد العام الحالي: ${await getGlobalTotal()}`);
+    console.log(`🎯 التحدي اليومي الحالي: ${await getDailyTotal()}/${DAILY_GOAL}`);
   } catch (error) {
     console.error('❌ خطأ في تهيئة قاعدة البيانات:', error);
     return;
@@ -385,6 +675,11 @@ client.once('clientReady', async () => {
       console.error('❌ خطأ في إرسال الذكر:', error);
     }
   }, 1800000);
+
+  setInterval(async () => {
+    await ensureDailyChallengeFresh();
+    await processDueReminders();
+  }, REMINDER_CHECK_INTERVAL_MS);
 });
 
 client.on('guildMemberAdd', async (member) => {
@@ -428,8 +723,28 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId === 'count_zekr') {
       try {
+        const beforeCount = await getUserCount(interaction.user.id);
         const personalCount = await increaseUserCount(interaction.user.id);
         const totalCount = await increaseGlobalTotal();
+        const dailyTotal = await increaseDailyTotal();
+
+        const currentRank = getRankByCount(personalCount);
+        const previousRank = getRankByCount(beforeCount);
+        const nextRank = getNextRank(personalCount);
+
+        let extraText = `📿 عدد مرات ذكرك: ${personalCount}\n🌍 العداد العام: ${totalCount}\n🎯 تقدم اليوم: ${dailyTotal}/${DAILY_GOAL}\n🏅 رتبتك: ${currentRank.name}`;
+
+        if (currentRank.name !== previousRank.name) {
+          extraText += `\n🎉 مبروك! وصلت رتبة جديدة: ${currentRank.name}`;
+        }
+
+        if (nextRank) {
+          extraText += `\n⬆️ باقي ${nextRank.min - personalCount} للوصول إلى رتبة ${nextRank.name}`;
+        }
+
+        if (dailyTotal >= DAILY_GOAL) {
+          extraText += `\n🔥 تم تحقيق الهدف اليومي أو تجاوزه!`;
+        }
 
         await interaction.update({
           embeds: [await createZekrEmbed()],
@@ -437,7 +752,7 @@ client.on('interactionCreate', async (interaction) => {
         });
 
         return await interaction.followUp({
-          content: `✅ تم احتسابها لك\n📿 عدد مرات ذكرك: ${personalCount}\n🌍 العداد العام: ${totalCount}`,
+          content: `✅ تم احتسابها لك\n${extraText}`,
           ephemeral: true
         });
       } catch (error) {
@@ -456,6 +771,138 @@ client.on('interactionCreate', async (interaction) => {
       embeds: [await createZekrEmbed()],
       components: [createZekrButtons()]
     });
+  }
+
+  if (interaction.commandName === 'rank') {
+    const user = interaction.options.getUser('user') || interaction.user;
+    const count = await getUserCount(user.id);
+    const rank = getRankByCount(count);
+    const nextRank = getNextRank(count);
+
+    const fields = [
+      { name: 'العضو', value: `${user}`, inline: true },
+      { name: 'عدد الأذكار', value: `${count}`, inline: true },
+      { name: 'الرتبة الحالية', value: rank.name, inline: true }
+    ];
+
+    if (nextRank) {
+      fields.push({
+        name: 'الرتبة التالية',
+        value: `${nextRank.name} (باقي ${nextRank.min - count})`,
+        inline: false
+      });
+    }
+
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '🏅 الرتبة والأذكار',
+          thumbnail: user.displayAvatarURL({ dynamic: true, size: 1024 }),
+          fields,
+          footer: 'Rank System'
+        })
+      ]
+    });
+  }
+
+  if (interaction.commandName === 'top') {
+    const topUsers = await getTopUsers(10);
+
+    if (!topUsers.length) {
+      return interaction.reply({
+        content: '❌ لا توجد بيانات كافية بعد',
+        ephemeral: true
+      });
+    }
+
+    let description = '';
+
+    for (let i = 0; i < topUsers.length; i++) {
+      const row = topUsers[i];
+      description += `**${i + 1}.** <@${row.userId}> — \`${row.count}\`\n`;
+    }
+
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '🏆 أعلى 10 في الأذكار',
+          description,
+          footer: 'Top 10'
+        })
+      ]
+    });
+  }
+
+  if (interaction.commandName === 'challenge') {
+    const dailyTotal = await getDailyTotal();
+    const percent = Math.min(100, Math.floor((dailyTotal / DAILY_GOAL) * 100));
+    const remaining = Math.max(0, DAILY_GOAL - dailyTotal);
+
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '🎯 التحدي اليومي',
+          fields: [
+            { name: 'تاريخ اليوم', value: getTodayRiyadh(), inline: true },
+            { name: 'الهدف', value: `${DAILY_GOAL}`, inline: true },
+            { name: 'المجموع الحالي', value: `${dailyTotal}`, inline: true },
+            { name: 'نسبة الإنجاز', value: `${percent}%`, inline: true },
+            { name: 'المتبقي', value: `${remaining}`, inline: true },
+            { name: 'الحالة', value: dailyTotal >= DAILY_GOAL ? '✅ تم تحقيق الهدف' : '⏳ مستمر', inline: true }
+          ],
+          footer: 'Daily Challenge'
+        })
+      ]
+    });
+  }
+
+  if (interaction.commandName === 'reminder') {
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === 'set') {
+      const minutes = interaction.options.getInteger('minutes');
+      await setReminder(interaction.user.id, minutes);
+
+      return interaction.reply({
+        content: `✅ تم تشغيل التذكير الخاص لك كل ${minutes} دقيقة في الخاص`,
+        ephemeral: true
+      });
+    }
+
+    if (sub === 'off') {
+      const disabled = await disableReminder(interaction.user.id);
+
+      return interaction.reply({
+        content: disabled ? '🛑 تم إيقاف التذكير الخاص' : '❌ ما عندك تذكير مفعل أصلًا',
+        ephemeral: true
+      });
+    }
+
+    if (sub === 'status') {
+      const reminder = await getReminder(interaction.user.id);
+
+      if (!reminder || !reminder.enabled) {
+        return interaction.reply({
+          content: '❌ التذكير الخاص غير مفعل لديك',
+          ephemeral: true
+        });
+      }
+
+      return interaction.reply({
+        embeds: [
+          createEmbed({
+            title: '⏰ حالة التذكير الخاص',
+            fields: [
+              { name: 'الحالة', value: reminder.enabled ? 'مفعل' : 'متوقف', inline: true },
+              { name: 'كل كم دقيقة', value: `${reminder.interval_minutes}`, inline: true },
+              { name: 'التذكير القادم', value: new Date(reminder.next_reminder_at).toLocaleString('ar-SA'), inline: false }
+            ],
+            footer: 'Reminder Status'
+          })
+        ],
+        ephemeral: true
+      });
+    }
   }
 
   if (interaction.commandName === 'join') {
@@ -529,33 +976,40 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.commandName === 'ping') {
     const apiPing = Math.round(client.ws.ping);
 
-    const embed = createEmbed({
-      title: '🏓 سرعة البوت',
-      fields: [
-        { name: 'Ping', value: `\`${apiPing}ms\``, inline: true },
-        { name: 'السيرفر', value: `${interaction.guild.name}`, inline: true }
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '🏓 سرعة البوت',
+          fields: [
+            { name: 'Ping', value: `\`${apiPing}ms\``, inline: true },
+            { name: 'السيرفر', value: `${interaction.guild.name}`, inline: true }
+          ],
+          footer: 'Discord Bot'
+        })
       ],
-      footer: 'Discord Bot'
+      ephemeral: true
     });
-
-    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
   if (interaction.commandName === 'avatar') {
     const user = interaction.options.getUser('user') || interaction.user;
 
-    const embed = createEmbed({
-      title: `🖼️ صورة ${user.username}`,
-      image: user.displayAvatarURL({ dynamic: true, size: 1024 }),
-      footer: `Requested by ${interaction.user.username}`
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: `🖼️ صورة ${user.username}`,
+          image: user.displayAvatarURL({ dynamic: true, size: 1024 }),
+          footer: `Requested by ${interaction.user.username}`
+        })
+      ]
     });
-
-    return interaction.reply({ embeds: [embed] });
   }
 
   if (interaction.commandName === 'userinfo') {
     const user = interaction.options.getUser('user') || interaction.user;
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    const count = await getUserCount(user.id);
+    const rank = getRankByCount(count);
 
     const roles = member
       ? member.roles.cache
@@ -565,41 +1019,47 @@ client.on('interactionCreate', async (interaction) => {
           .join(' ، ') || 'لا توجد رتب'
       : 'غير متوفر';
 
-    const embed = createEmbed({
-      title: '👤 معلومات العضو',
-      thumbnail: user.displayAvatarURL({ dynamic: true, size: 1024 }),
-      fields: [
-        { name: 'الاسم', value: `${user.tag}`, inline: true },
-        { name: 'الآيدي', value: `${user.id}`, inline: true },
-        { name: 'بوت؟', value: user.bot ? 'نعم' : 'لا', inline: true },
-        { name: 'تاريخ إنشاء الحساب', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`, inline: false },
-        { name: 'تاريخ دخول السيرفر', value: member?.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : 'غير متوفر', inline: false },
-        { name: 'الرتب', value: roles, inline: false }
-      ],
-      footer: 'User Info'
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '👤 معلومات العضو',
+          thumbnail: user.displayAvatarURL({ dynamic: true, size: 1024 }),
+          fields: [
+            { name: 'الاسم', value: `${user.tag}`, inline: true },
+            { name: 'الآيدي', value: `${user.id}`, inline: true },
+            { name: 'بوت؟', value: user.bot ? 'نعم' : 'لا', inline: true },
+            { name: 'عدد الأذكار', value: `${count}`, inline: true },
+            { name: 'الرتبة', value: rank.name, inline: true },
+            { name: 'تاريخ إنشاء الحساب', value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`, inline: false },
+            { name: 'تاريخ دخول السيرفر', value: member?.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : 'غير متوفر', inline: false },
+            { name: 'الرتب', value: roles, inline: false }
+          ],
+          footer: 'User Info'
+        })
+      ]
     });
-
-    return interaction.reply({ embeds: [embed] });
   }
 
   if (interaction.commandName === 'server') {
     const guild = interaction.guild;
 
-    const embed = createEmbed({
-      title: '🟢 معلومات السيرفر',
-      thumbnail: guild.iconURL({ dynamic: true, size: 1024 }) || null,
-      fields: [
-        { name: 'اسم السيرفر', value: guild.name, inline: true },
-        { name: 'آيدي السيرفر', value: guild.id, inline: true },
-        { name: 'المالك', value: `<@${guild.ownerId}>`, inline: true },
-        { name: 'عدد الأعضاء', value: `${guild.memberCount}`, inline: true },
-        { name: 'عدد الرومات', value: `${guild.channels.cache.size}`, inline: true },
-        { name: 'تاريخ الإنشاء', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:F>`, inline: false }
-      ],
-      footer: 'Server Info'
+    return interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '🟢 معلومات السيرفر',
+          thumbnail: guild.iconURL({ dynamic: true, size: 1024 }) || null,
+          fields: [
+            { name: 'اسم السيرفر', value: guild.name, inline: true },
+            { name: 'آيدي السيرفر', value: guild.id, inline: true },
+            { name: 'المالك', value: `<@${guild.ownerId}>`, inline: true },
+            { name: 'عدد الأعضاء', value: `${guild.memberCount}`, inline: true },
+            { name: 'عدد الرومات', value: `${guild.channels.cache.size}`, inline: true },
+            { name: 'تاريخ الإنشاء', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:F>`, inline: false }
+          ],
+          footer: 'Server Info'
+        })
+      ]
     });
-
-    return interaction.reply({ embeds: [embed] });
   }
 
   if (interaction.commandName === 'suggest') {
