@@ -719,10 +719,10 @@ client.on('interactionCreate', async (interaction) => {
          const embed = new EmbedBuilder()
   .setColor('#0F9D9A')
   .setAuthor({
-    name: 'إدارة السيرفر',
+    name: 'Time Dosn',
     iconURL: interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
   })
-  .setTitle('📩 رسالة إدارية')
+  .setTitle('📩 رسالة دينية')
   .setDescription(`📌 **محتوى الرسالة:**\n${message}`)
   .setThumbnail(interaction.guild.iconURL({ dynamic: true }) || client.user.displayAvatarURL())
   .setFooter({ text: 'Time Dosn System' })
