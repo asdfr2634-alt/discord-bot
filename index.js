@@ -619,6 +619,7 @@ client.once('clientReady', async () => {
   } catch (error) {
     console.error('❌ خطأ أثناء تشغيل البوت:', error);
   }
+});
 
 client.on('guildMemberAdd', async (member) => {
   try {
@@ -668,6 +669,7 @@ client.on('guildMemberAdd', async (member) => {
     console.error('❌ خطأ في رسالة الترحيب:', error);
   }
 });
+
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isButton()) {
@@ -731,7 +733,6 @@ client.on('interactionCreate', async (interaction) => {
 
     if (!interaction.isChatInputCommand()) return;
 
-    // 🔒 حماية الأوامر المحددة
     if (protectedCommands.includes(interaction.commandName)) {
       const member = interaction.member;
       const hasPermission = member.roles.cache.some(role => ALLOWED_ROLES.includes(role.id));
