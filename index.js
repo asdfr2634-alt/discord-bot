@@ -619,33 +619,55 @@ client.once('clientReady', async () => {
   } catch (error) {
     console.error('❌ خطأ أثناء تشغيل البوت:', error);
   }
-});
 
 client.on('guildMemberAdd', async (member) => {
   try {
     if (!process.env.WELCOME_CHANNEL_ID) return;
 
-    const channel = await member.guild.channels.fetch(process.env.WELCOME_CHANNEL_ID).catch(() => null);
+    const channel = await member.guild.channels
+      .fetch(process.env.WELCOME_CHANNEL_ID)
+      .catch(() => null);
+
     if (!channel) return;
 
-    const embed = createEmbed({
-      title: '👋 عضو جديد',
-      description: `حياك الله ${member} في **${member.guild.name}**`,
-      fields: [
-        { name: 'العضو', value: `${member.user.tag}`, inline: true },
-        { name: 'رقم العضو', value: `${member.user.id}`, inline: true },
-        { name: 'نتمنى لك', value: 'وقتًا ممتعًا والتزامًا جميلًا بالقوانين', inline: false }
-      ],
-      thumbnail: member.user.displayAvatarURL({ dynamic: true, size: 1024 }),
-      footer: 'نظام الترحيب'
-    });
+    const embed = new EmbedBuilder()
+      .setColor('#C6A55C')
+      .setAuthor({
+        name: `${member.guild.name} • Welcome`,
+        iconURL:
+          member.guild.iconURL({ dynamic: true }) ||
+          client.user.displayAvatarURL()
+      })
+      .setTitle(`Welcome, ${member.user.username}`)
+      .setDescription(
+        [
+          `> We are delighted to welcome you to **${member.guild.name}**.`,
+          `> Please take a moment to read the rules and enjoy your stay.`,
+          `> We hope you have a great experience with us.`
+        ].join('\n')
+      )
+      .addFields(
+        { name: 'Member', value: `${member}`, inline: true },
+        { name: 'Tag', value: `\`${member.user.tag}\``, inline: true },
+        { name: 'Members', value: `\`${member.guild.memberCount}\``, inline: true }
+      )
+      .setThumbnail(
+        member.user.displayAvatarURL({ dynamic: true, size: 1024 })
+      )
+      .setFooter({
+        text: `${member.guild.name} • Premium Welcome System`,
+        iconURL: member.guild.iconURL({ dynamic: true }) || undefined
+      })
+      .setTimestamp();
 
-    await channel.send({ content: `${member}`, embeds: [embed] });
+    await channel.send({
+      content: `✨ Welcome ${member}`,
+      embeds: [embed]
+    });
   } catch (error) {
     console.error('❌ خطأ في رسالة الترحيب:', error);
   }
 });
-
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isButton()) {
