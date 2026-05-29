@@ -1329,6 +1329,16 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.commandName === 'dashboard') {
+  await interaction.deferReply({ ephemeral: true });
+
+  const dashboardUrl =
+    process.env.RENDER_EXTERNAL_URL ||
+    'https://discord-bot-5h8e.onrender.com';
+
+  return await interaction.editReply({
+    content: `🌐 رابط لوحة الويب:\n${dashboardUrl}`
+  });
+}
       return await interaction.reply({
         content: `🌐 رابط لوحة الويب:\n${process.env.RENDER_EXTERNAL_URL || 'افتح رابط خدمة Render الأساسي'}`,
         ephemeral: true
