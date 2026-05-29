@@ -143,6 +143,303 @@ function startDashboardServer() {
       } catch (_) {}
 
       const botTag = client.user?.tag || 'Not logged in yet';
+      const botAvatar = client.user?.displayAvatarURL?.({ size: 256 }) || '';
+      const uptime = Math.floor(process.uptime());
+      const uptimeHours = Math.floor(uptime / 3600);
+      const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+      const guild = client.guilds.cache.first();
+      const guildName = guild?.name || 'Discord Server';
+      const memberCount = guild?.memberCount || 0;
+
+      const html = `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Time Dosn Dashboard</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Tahoma,Arial,sans-serif;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(0,191,255,.20), transparent 35%),
+    radial-gradient(circle at 80% 0%, rgba(0,95,180,.25), transparent 35%),
+    linear-gradient(135deg,#020617,#061426 45%,#020617);
+  color:#eaf6ff;
+  min-height:100vh;
+}
+.wrapper{
+  max-width:1250px;
+  margin:auto;
+  padding:28px;
+}
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  padding:22px;
+  border:1px solid rgba(56,189,248,.35);
+  background:rgba(2,12,27,.72);
+  box-shadow:0 0 40px rgba(14,165,233,.15);
+  border-radius:24px;
+  backdrop-filter:blur(14px);
+}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+.logo{
+  width:78px;
+  height:78px;
+  border-radius:50%;
+  border:2px solid #38bdf8;
+  box-shadow:0 0 25px rgba(56,189,248,.55);
+}
+h1,h2,p{margin:0}
+.muted{color:#9cc8df}
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:rgba(34,197,94,.15);
+  color:#22c55e;
+  border:1px solid rgba(34,197,94,.35);
+  padding:9px 14px;
+  border-radius:999px;
+  font-weight:bold;
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:16px;
+  margin-top:18px;
+}
+.card{
+  border:1px solid rgba(56,189,248,.28);
+  background:linear-gradient(180deg,rgba(8,27,50,.86),rgba(3,10,24,.86));
+  border-radius:22px;
+  padding:20px;
+  box-shadow:0 12px 35px rgba(0,0,0,.35), inset 0 0 25px rgba(14,165,233,.04);
+}
+.card:hover{
+  border-color:rgba(125,211,252,.65);
+  box-shadow:0 0 35px rgba(14,165,233,.20);
+}
+.icon{
+  font-size:28px;
+  margin-bottom:10px;
+  color:#38bdf8;
+}
+.num{
+  font-size:34px;
+  font-weight:900;
+  color:#ffffff;
+  margin-top:10px;
+  text-shadow:0 0 14px rgba(56,189,248,.4);
+}
+.section{
+  margin-top:18px;
+  display:grid;
+  grid-template-columns:1.2fr .8fr;
+  gap:16px;
+}
+@media(max-width:850px){
+  .section{grid-template-columns:1fr}
+  .header{flex-direction:column;align-items:flex-start}
+}
+.list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:14px;
+}
+.row{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:center;
+  padding:13px 14px;
+  border-radius:15px;
+  background:rgba(14,165,233,.08);
+  border:1px solid rgba(56,189,248,.13);
+}
+.commands{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+  gap:12px;
+  margin-top:14px;
+}
+.cmd{
+  text-align:center;
+  padding:14px;
+  border-radius:16px;
+  background:rgba(14,165,233,.09);
+  border:1px solid rgba(56,189,248,.17);
+  color:#dff6ff;
+  font-weight:bold;
+}
+.notice{
+  margin-top:18px;
+  padding:16px;
+  border-radius:18px;
+  background:rgba(14,165,233,.09);
+  border:1px dashed rgba(125,211,252,.35);
+  color:#bfeaff;
+}
+.footer{
+  text-align:center;
+  margin:24px 0 5px;
+  color:#7aaac2;
+}
+a{color:#38bdf8;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <div class="brand">
+      ${botAvatar ? `<img class="logo" src="${botAvatar}" />` : `<div class="logo"></div>`}
+      <div>
+        <h1>Time Dosn Dashboard</h1>
+        <p class="muted">لوحة عامة لعرض حالة البوت وإحصائياته</p>
+      </div>
+    </div>
+    <div>
+      <span class="badge">● البوت شغال</span>
+      <p class="muted" style="margin-top:10px">Read Only • عرض فقط</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="icon">📿</div>
+      <p class="muted">العداد العام</p>
+      <div class="num">${stats.globalTotal}</div>
+    </div>
+
+    <div class="card">
+      <div class="icon">🎯</div>
+      <p class="muted">تحدي اليوم</p>
+      <div class="num">${stats.dailyTotal}/${DAILY_GOAL}</div>
+    </div>
+
+    <div class="card">
+      <div class="icon">👥</div>
+      <p class="muted">أعضاء السيرفر</p>
+      <div class="num">${memberCount}</div>
+    </div>
+
+    <div class="card">
+      <div class="icon">✉️</div>
+      <p class="muted">مشتركي الرسائل الخاصة</p>
+      <div class="num">${stats.subscribersCount}</div>
+    </div>
+
+    <div class="card">
+      <div class="icon">🧠</div>
+      <p class="muted">ذاكرة الذكاء</p>
+      <div class="num">${stats.memoryCount}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="card">
+      <h2>🤖 معلومات البوت</h2>
+      <div class="list">
+        <div class="row"><span>اسم البوت</span><b>${botTag}</b></div>
+        <div class="row"><span>السيرفر</span><b>${guildName}</b></div>
+        <div class="row"><span>مدة التشغيل</span><b>${uptimeHours} ساعة و ${uptimeMinutes} دقيقة</b></div>
+        <div class="row"><span>الحالة</span><b style="color:#22c55e">متصل</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⚡ مميزات مفعلة</h2>
+      <div class="list">
+        <div class="row"><span>الأذكار</span><b>✅</b></div>
+        <div class="row"><span>قاعدة البيانات</span><b>✅</b></div>
+        <div class="row"><span>الذكاء الاصطناعي</span><b>✅</b></div>
+        <div class="row"><span>قراءة الصور</span><b>✅</b></div>
+        <div class="row"><span>لوحة عامة</span><b>✅</b></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h2>🧩 أوامر البوت</h2>
+    <div class="commands">
+      <div class="cmd">/ai</div>
+      <div class="cmd">/aiclear</div>
+      <div class="cmd">/zekr</div>
+      <div class="cmd">/rank</div>
+      <div class="cmd">/top</div>
+      <div class="cmd">/challenge</div>
+      <div class="cmd">/quran</div>
+      <div class="cmd">/avatar</div>
+      <div class="cmd">/userinfo</div>
+      <div class="cmd">/server</div>
+      <div class="cmd">/suggest</div>
+      <div class="cmd">/dashboard</div>
+    </div>
+
+    <div class="notice">
+      هذه اللوحة للعرض فقط. لا تحتوي على أزرار تعديل أو تحكم، ولا تعرض أي مفاتيح سرية أو بيانات حساسة.
+    </div>
+  </div>
+
+  <div class="footer">
+    © Time Dosn Bot • Dark Blue & Cyan Dashboard
+  </div>
+
+</div>
+</body>
+</html>`;
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } catch (error) {
+      console.error('Dashboard Error:', error);
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Dashboard Error');
+    }
+  }).listen(PORT, '0.0.0.0', () => {
+    console.log(`🌐 Web server running on port ${PORT}`);
+  });
+}
+  http.createServer(async (req, res) => {
+    try {
+      if (req.url.startsWith('/health')) {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('OK');
+      }
+
+      let stats = {
+        globalTotal: '0',
+        dailyTotal: '0',
+        usersCount: '0',
+        subscribersCount: '0',
+        memoryCount: '0'
+      };
+
+      try {
+        stats.globalTotal = await getStat('global_zekr_total', '0');
+        stats.dailyTotal = await getStat('daily_zekr_total', '0');
+
+        const usersResult = await pool.query('SELECT COUNT(*) FROM user_zekr_counts');
+        const subsResult = await pool.query('SELECT COUNT(*) FROM dm_subscribers WHERE subscribed = TRUE');
+        const memoryResult = await pool.query('SELECT COUNT(*) FROM ai_memory');
+
+        stats.usersCount = usersResult.rows[0].count;
+        stats.subscribersCount = subsResult.rows[0].count;
+        stats.memoryCount = memoryResult.rows[0].count;
+      } catch (_) {}
+
+      const botTag = client.user?.tag || 'Not logged in yet';
       const uptime = Math.floor(process.uptime());
 
       const html = `
