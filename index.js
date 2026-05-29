@@ -1,4 +1,16 @@
 require('dotenv').config();
+
+const http = require('http');
+
+const PORT = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Bot Online');
+}).listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
+});
+
 const {
   Client,
   GatewayIntentBits,
@@ -11,6 +23,7 @@ const {
   ActionRowBuilder,
   PermissionFlagsBits
 } = require('discord.js');
+
 const {
   joinVoiceChannel,
   getVoiceConnection,
@@ -21,6 +34,7 @@ const {
   VoiceConnectionStatus,
   AudioPlayerStatus
 } = require('@discordjs/voice');
+
 const { Pool } = require('pg');
 
 const client = new Client({
@@ -36,13 +50,11 @@ const client = new Client({
 const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
 const DAILY_GOAL = Number(process.env.DAILY_GOAL || 1000);
 
-// 🔒 الرتب المسموح لها للأوامر المحمية
 const ALLOWED_ROLES = [
   '1462992022486126644',
   '1463355611621101715'
 ];
 
-// 🛡️ الأوامر المحمية فقط
 const protectedCommands = ['ping', 'leave', 'dmall'];
 
 const pool = new Pool({
