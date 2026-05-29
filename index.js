@@ -172,6 +172,45 @@ function createEmbed({
   return embed;
 }
 
+async function askGemini(question) {
+  if (!process.env.GEMINI_API_KEY) {
+    return '❌ مفتاح GEMINI_API_KEY غير موجود في Render Environment.';
+  }
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `أجب باللغة العربية بشكل واضح ومختصر ومفيد، وبدون إطالة زائدة:\n\n${question}`
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Gemini API Error:', data);
+      return '❌ صار خطأ من Gemini API. تأكد من المفتاح أو جرّب بعد قليل.';
+    }
+
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '❌ ما قدرت أطلع رد مناسب.';
+  } catch (error) {
+    console.error('❌ خطأ في askGemini:', error);
+    return '❌ صار خطأ أثناء الاتصال بالذكاء الاصطناعي.';
+  }
+}
+
 function createDmReadButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -457,6 +496,15 @@ const commands = [
   new SlashCommandBuilder()
     .setName('zekr')
     .setDescription('يرسل ذكرًا جميلًا مع أزرار'),
+
+  new SlashCommandBuilder()
+    .setName('ai')
+    .setDescription('اسأل الذكاء الاصطناعي')
+    .addStringOption(option =>
+      option.setName('question')
+        .setDescription('اكتب سؤالك')
+        .setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName('rank')
@@ -758,6 +806,24 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
 
+    if (interaction.commandName === 'ai') {
+      await interaction.deferReply();
+
+      const question = interaction.options.getString('question');
+      const answer = await askGemini(question);
+
+      return await interaction.editReply({
+        embeds: [createEmbed({
+          title: '🤖 الذكاء الاصطناعي',
+          description: answer.slice(0, 4000),
+          fields: [
+            { name: 'سؤالك', value: question.slice(0, 1000), inline: false }
+          ],
+          footer: 'Gemini AI'
+        })]
+      });
+    }
+
     if (interaction.commandName === 'zekr') {
       await interaction.deferReply();
       return await interaction.editReply({
@@ -834,7 +900,7 @@ client.on('interactionCreate', async (interaction) => {
             { name: 'المجموع الحالي', value: `${dailyTotal}`, inline: true },
             { name: 'نسبة الإنجاز', value: `${percent}%`, inline: true },
             { name: 'المتبقي', value: `${remaining}`, inline: true },
-            { name: 'الحالة', value: dailyTotal >= DAILY_GOAL ? '✅جزاك الله خير تم تحقيق الهدف' : '⏳ لا توقف كمل ', inline: true }
+            { name: 'الحالة', value: dailyTotal >= DAILY_GOAL ? '✅ تم تحقيق الهدف' : '⏳ مستمر', inline: true }
           ],
           footer: 'Daily Challenge'
         })]
