@@ -2,15 +2,6 @@ require('dotenv').config();
 
 const http = require('http');
 
-const PORT = process.env.PORT || 3000;
-
-http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('Bot Online');
-}).listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
-});
-
 const {
   Client,
   GatewayIntentBits,
@@ -37,6 +28,20 @@ const {
 
 const { Pool } = require('pg');
 
+const PORT = process.env.PORT || 3000;
+const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
+const DAILY_GOAL = Number(process.env.DAILY_GOAL || 1000);
+
+const TEXT_AI_MODEL = 'llama-3.1-8b-instant';
+const VISION_AI_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+
+const ALLOWED_ROLES = [
+  '1462992022486126644',
+  '1463355611621101715'
+];
+
+const protectedCommands = ['ping', 'leave', 'dmall'];
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -47,16 +52,6 @@ const client = new Client({
   ]
 });
 
-const QURAN_URL = 'https://server8.mp3quran.net/afs/001.mp3';
-const DAILY_GOAL = Number(process.env.DAILY_GOAL || 1000);
-
-const ALLOWED_ROLES = [
-  '1462992022486126644',
-  '1463355611621101715'
-];
-
-const protectedCommands = ['ping', 'leave', 'dmall'];
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
@@ -65,6 +60,8 @@ const pool = new Pool({
 pool.on('error', (err) => {
   console.error('❌ PostgreSQL pool error:', err);
 });
+
+const players = new Map();
 
 const adhkar = [
   'سبحان الله',
@@ -116,7 +113,96 @@ const rankTiers = [
   { name: 'أسطورة الذكر', min: 1000 }
 ];
 
-const players = new Map();
+function startDashboardServer() {
+  http.createServer(async (req, res) => {
+    try {
+      if (req.url.startsWith('/health')) {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('OK');
+      }
+
+      let stats = {
+        globalTotal: '0',
+        dailyTotal: '0',
+        usersCount: '0',
+        subscribersCount: '0',
+        memoryCount: '0'
+      };
+
+      try {
+        stats.globalTotal = await getStat('global_zekr_total', '0');
+        stats.dailyTotal = await getStat('daily_zekr_total', '0');
+
+        const usersResult = await pool.query('SELECT COUNT(*) FROM user_zekr_counts');
+        const subsResult = await pool.query('SELECT COUNT(*) FROM dm_subscribers WHERE subscribed = TRUE');
+        const memoryResult = await pool.query('SELECT COUNT(*) FROM ai_memory');
+
+        stats.usersCount = usersResult.rows[0].count;
+        stats.subscribersCount = subsResult.rows[0].count;
+        stats.memoryCount = memoryResult.rows[0].count;
+      } catch (_) {}
+
+      const botTag = client.user?.tag || 'Not logged in yet';
+      const uptime = Math.floor(process.uptime());
+
+      const html = `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot Dashboard</title>
+<style>
+body{margin:0;font-family:Tahoma,Arial;background:#111827;color:#fff}
+.container{max-width:1000px;margin:auto;padding:30px}
+.card{background:#1f2937;border:1px solid #374151;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+.num{font-size:32px;font-weight:bold;color:#22c55e}
+h1{color:#e5e7eb}
+small{color:#9ca3af}
+.badge{display:inline-block;background:#065f46;padding:7px 12px;border-radius:999px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🤖 لوحة تحكم البوت</h1>
+<p class="badge">الحالة: شغال</p>
+
+<div class="card">
+<h2>معلومات عامة</h2>
+<p>البوت: <b>${botTag}</b></p>
+<p>مدة التشغيل: <b>${uptime}</b> ثانية</p>
+<p>Render Port: <b>${PORT}</b></p>
+</div>
+
+<div class="grid">
+<div class="card"><small>العداد العام</small><div class="num">${stats.globalTotal}</div></div>
+<div class="card"><small>عداد اليوم</small><div class="num">${stats.dailyTotal}/${DAILY_GOAL}</div></div>
+<div class="card"><small>مستخدمين عندهم أذكار</small><div class="num">${stats.usersCount}</div></div>
+<div class="card"><small>مشتركين DM</small><div class="num">${stats.subscribersCount}</div></div>
+<div class="card"><small>رسائل ذاكرة AI</small><div class="num">${stats.memoryCount}</div></div>
+</div>
+
+<div class="card">
+<h2>الأوامر الجديدة</h2>
+<p><b>/ai</b> اسأل الذكاء أو ارفع صورة معه.</p>
+<p><b>/aiclear</b> يمسح ذاكرة الذكاء الخاصة فيك.</p>
+<p><b>/dashboard</b> يعطيك رابط هذه اللوحة.</p>
+</div>
+</div>
+</body>
+</html>`;
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Dashboard Error');
+    }
+  }).listen(PORT, '0.0.0.0', () => {
+    console.log(`🌐 Web server running on port ${PORT}`);
+  });
+}
 
 function getTodayRiyadh() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -172,49 +258,6 @@ function createEmbed({
   return embed;
 }
 
-async function askGroq(question) {
-  if (!process.env.GROQ_API_KEY) {
-    return '❌ مفتاح GROQ_API_KEY غير موجود في Render Environment.';
-  }
-
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          {
-            role: 'system',
-            content: 'أنت مساعد ذكي داخل سيرفر ديسكورد. أجب بالعربية بشكل واضح ومختصر ومفيد.'
-          },
-          {
-            role: 'user',
-            content: question
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 800
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('❌ Groq API Error:', data);
-      return `❌ صار خطأ من Groq API: ${data?.error?.message || 'غير معروف'}`;
-    }
-
-    return data?.choices?.[0]?.message?.content || '❌ ما قدرت أطلع رد مناسب.';
-  } catch (error) {
-    console.error('❌ خطأ في askGroq:', error);
-    return '❌ صار خطأ أثناء الاتصال بالذكاء الاصطناعي.';
-  }
-}
-
 function createDmReadButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -223,70 +266,6 @@ function createDmReadButtons() {
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success)
   );
-}
-
-async function sendDmReadLog(user) {
-  try {
-    if (!process.env.LOG_CHANNEL_ID) return;
-
-    const logChannel = await client.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
-    if (!logChannel) return;
-
-    const embed = new EmbedBuilder()
-      .setColor('#57F287')
-      .setTitle('✅ تم الاطلاع على رسالة DM')
-      .setDescription('أحد المشتركين اطّلع على الرسالة الإدارية')
-      .addFields(
-        { name: 'العضو', value: `${user} (${user.tag})`, inline: false },
-        { name: 'آيدي العضو', value: user.id, inline: true }
-      )
-      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 1024 }))
-      .setFooter({ text: 'DM Read Logs' })
-      .setTimestamp();
-
-    await logChannel.send({ embeds: [embed] });
-  } catch (error) {
-    console.error('❌ خطأ في لوق تم الاطلاع:', error);
-  }
-}
-
-async function sendPermissionLog(interaction) {
-  try {
-    if (!process.env.LOG_CHANNEL_ID) return;
-
-    const logChannel = await interaction.guild.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
-    if (!logChannel) return;
-
-    const logEmbed = new EmbedBuilder()
-      .setColor('#ED4245')
-      .setTitle('🚨 محاولة استخدام أمر محمي')
-      .setDescription('تم رصد محاولة استخدام أمر بدون صلاحية')
-      .addFields(
-        { name: 'العضو', value: `${interaction.user} (${interaction.user.tag})`, inline: false },
-        { name: 'آيدي العضو', value: interaction.user.id, inline: true },
-        { name: 'الأمر', value: `/${interaction.commandName}`, inline: true },
-        { name: 'السيرفر', value: interaction.guild.name, inline: true }
-      )
-      .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 1024 }))
-      .setFooter({ text: 'Protection Logs' })
-      .setTimestamp();
-
-    await logChannel.send({ embeds: [logEmbed] });
-  } catch (error) {
-    console.error('❌ خطأ في إرسال اللوق:', error);
-  }
-}
-
-function createDeniedEmbed() {
-  return new EmbedBuilder()
-    .setColor('#ED4245')
-    .setTitle('🚫 رفض الوصول')
-    .setDescription('ليس لديك الصلاحية لاستخدام هذا الأمر.')
-    .addFields(
-      { name: 'ملاحظة', value: 'هذا الأمر مخصص لرتب إدارية محددة فقط.', inline: false }
-    )
-    .setFooter({ text: 'نظام الحماية' })
-    .setTimestamp();
 }
 
 async function initDatabase() {
@@ -308,6 +287,16 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS dm_subscribers (
       user_id TEXT PRIMARY KEY,
       subscribed BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_memory (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
@@ -461,6 +450,123 @@ async function getSubscribedUsers() {
   return result.rows.map((row) => row.user_id);
 }
 
+async function saveAiMemory(userId, role, content) {
+  await pool.query(
+    'INSERT INTO ai_memory (user_id, role, content) VALUES ($1, $2, $3)',
+    [userId, role, content.slice(0, 3000)]
+  );
+
+  await pool.query(
+    `
+    DELETE FROM ai_memory
+    WHERE id IN (
+      SELECT id FROM ai_memory
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      OFFSET 12
+    )
+    `,
+    [userId]
+  );
+}
+
+async function getAiMemory(userId) {
+  const result = await pool.query(
+    `
+    SELECT role, content
+    FROM ai_memory
+    WHERE user_id = $1
+    ORDER BY created_at ASC
+    LIMIT 12
+    `,
+    [userId]
+  );
+
+  return result.rows.map((row) => ({
+    role: row.role,
+    content: row.content
+  }));
+}
+
+async function clearAiMemory(userId) {
+  await pool.query('DELETE FROM ai_memory WHERE user_id = $1', [userId]);
+}
+
+async function askGroq({ userId, question, imageUrl = null }) {
+  if (!process.env.GROQ_API_KEY) {
+    return '❌ مفتاح GROQ_API_KEY غير موجود في Render Environment.';
+  }
+
+  try {
+    const memory = imageUrl ? [] : await getAiMemory(userId);
+
+    const messages = [
+      {
+        role: 'system',
+        content:
+          'أنت مساعد ذكي داخل سيرفر ديسكورد خاص. أجب بالعربية بشكل واضح ومفيد ومختصر. إذا سألك المستخدم عن شيء سابق، استخدم الذاكرة المتاحة فقط.'
+      },
+      ...memory
+    ];
+
+    if (imageUrl) {
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `حلل الصورة أو أجب عن السؤال التالي بالعربية:\n${question}`
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl
+            }
+          }
+        ]
+      });
+    } else {
+      messages.push({
+        role: 'user',
+        content: question
+      });
+    }
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: imageUrl ? VISION_AI_MODEL : TEXT_AI_MODEL,
+        messages,
+        temperature: 0.7,
+        max_completion_tokens: imageUrl ? 1000 : 800
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Groq API Error:', data);
+      return `❌ صار خطأ من Groq API: ${data?.error?.message || 'غير معروف'}`;
+    }
+
+    const answer = data?.choices?.[0]?.message?.content || '❌ ما قدرت أطلع رد مناسب.';
+
+    if (!imageUrl) {
+      await saveAiMemory(userId, 'user', question);
+      await saveAiMemory(userId, 'assistant', answer);
+    }
+
+    return answer;
+  } catch (error) {
+    console.error('❌ خطأ في askGroq:', error);
+    return '❌ صار خطأ أثناء الاتصال بالذكاء الاصطناعي.';
+  }
+}
+
 async function createZekrEmbed(selectedZekr = randomZekr()) {
   const globalTotal = await getGlobalTotal();
   const dailyTotal = await getDailyTotal();
@@ -496,6 +602,70 @@ function createZekrButtons() {
   );
 }
 
+async function sendDmReadLog(user) {
+  try {
+    if (!process.env.LOG_CHANNEL_ID) return;
+
+    const logChannel = await client.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
+    if (!logChannel) return;
+
+    const embed = new EmbedBuilder()
+      .setColor('#57F287')
+      .setTitle('✅ تم الاطلاع على رسالة DM')
+      .setDescription('أحد المشتركين اطّلع على الرسالة الإدارية')
+      .addFields(
+        { name: 'العضو', value: `${user} (${user.tag})`, inline: false },
+        { name: 'آيدي العضو', value: user.id, inline: true }
+      )
+      .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 1024 }))
+      .setFooter({ text: 'DM Read Logs' })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error('❌ خطأ في لوق تم الاطلاع:', error);
+  }
+}
+
+async function sendPermissionLog(interaction) {
+  try {
+    if (!process.env.LOG_CHANNEL_ID) return;
+
+    const logChannel = await interaction.guild.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
+    if (!logChannel) return;
+
+    const logEmbed = new EmbedBuilder()
+      .setColor('#ED4245')
+      .setTitle('🚨 محاولة استخدام أمر محمي')
+      .setDescription('تم رصد محاولة استخدام أمر بدون صلاحية')
+      .addFields(
+        { name: 'العضو', value: `${interaction.user} (${interaction.user.tag})`, inline: false },
+        { name: 'آيدي العضو', value: interaction.user.id, inline: true },
+        { name: 'الأمر', value: `/${interaction.commandName}`, inline: true },
+        { name: 'السيرفر', value: interaction.guild.name, inline: true }
+      )
+      .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true, size: 1024 }))
+      .setFooter({ text: 'Protection Logs' })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [logEmbed] });
+  } catch (error) {
+    console.error('❌ خطأ في إرسال اللوق:', error);
+  }
+}
+
+function createDeniedEmbed() {
+  return new EmbedBuilder()
+    .setColor('#ED4245')
+    .setTitle('🚫 رفض الوصول')
+    .setDescription('ليس لديك الصلاحية لاستخدام هذا الأمر.')
+    .addFields(
+      { name: 'ملاحظة', value: 'هذا الأمر مخصص لرتب إدارية محددة فقط.', inline: false }
+    )
+    .setFooter({ text: 'نظام الحماية' })
+    .setTimestamp();
+}
+
 const commands = [
   new SlashCommandBuilder()
     .setName('zekr')
@@ -503,12 +673,25 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('ai')
-    .setDescription('اسأل الذكاء الاصطناعي')
+    .setDescription('اسأل الذكاء الاصطناعي أو ارفع صورة')
     .addStringOption(option =>
       option.setName('question')
         .setDescription('اكتب سؤالك')
         .setRequired(true)
+    )
+    .addAttachmentOption(option =>
+      option.setName('image')
+        .setDescription('ارفع صورة للذكاء يحللها')
+        .setRequired(false)
     ),
+
+  new SlashCommandBuilder()
+    .setName('aiclear')
+    .setDescription('مسح ذاكرة الذكاء الخاصة بك'),
+
+  new SlashCommandBuilder()
+    .setName('dashboard')
+    .setDescription('يعطيك رابط لوحة الويب'),
 
   new SlashCommandBuilder()
     .setName('rank')
@@ -814,17 +997,44 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferReply();
 
       const question = interaction.options.getString('question');
-     const answer = await askGroq(question);
+      const image = interaction.options.getAttachment('image');
+
+      if (image && !image.contentType?.startsWith('image/')) {
+        return await interaction.editReply('❌ الملف المرفق لازم يكون صورة.');
+      }
+
+      const answer = await askGroq({
+        userId: interaction.user.id,
+        question,
+        imageUrl: image?.url || null
+      });
 
       return await interaction.editReply({
         embeds: [createEmbed({
-          title: '🤖 الذكاء الاصطناعي',
+          title: image ? '🖼️ ذكاء الصور' : '🤖 الذكاء الاصطناعي',
           description: answer.slice(0, 4000),
           fields: [
-            { name: 'سؤالك', value: question.slice(0, 1000), inline: false }
+            { name: 'سؤالك', value: question.slice(0, 1000), inline: false },
+            { name: 'الذاكرة', value: image ? 'لا تُحفظ أسئلة الصور في الذاكرة' : 'تم حفظ المحادثة في ذاكرتك الخاصة', inline: false }
           ],
-          footer: 'Groq AI'
+          image: image?.url || null,
+          footer: image ? 'Groq Vision AI' : 'Groq AI Memory'
         })]
+      });
+    }
+
+    if (interaction.commandName === 'aiclear') {
+      await clearAiMemory(interaction.user.id);
+      return await interaction.reply({
+        content: '✅ تم مسح ذاكرة الذكاء الخاصة بك.',
+        ephemeral: true
+      });
+    }
+
+    if (interaction.commandName === 'dashboard') {
+      return await interaction.reply({
+        content: `🌐 رابط لوحة الويب:\n${process.env.RENDER_EXTERNAL_URL || 'افتح رابط خدمة Render الأساسي'}`,
+        ephemeral: true
       });
     }
 
@@ -964,7 +1174,7 @@ client.on('interactionCreate', async (interaction) => {
           });
 
           success++;
-        } catch (error) {
+        } catch (_) {
           failed++;
         }
       }
@@ -1140,4 +1350,5 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
+startDashboardServer();
 client.login(process.env.TOKEN);
