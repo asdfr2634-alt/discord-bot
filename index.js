@@ -179,7 +179,7 @@ async function askGemini(question) {
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,7 +188,7 @@ async function askGemini(question) {
             {
               parts: [
                 {
-                  text: `أجب باللغة العربية بشكل واضح ومختصر ومفيد، وبدون إطالة زائدة:\n\n${question}`
+                  text: `أجب باللغة العربية بشكل واضح ومختصر ومفيد:\n\n${question}`
                 }
               ]
             }
@@ -201,7 +201,7 @@ async function askGemini(question) {
 
     if (!response.ok) {
       console.error('❌ Gemini API Error:', data);
-      return '❌ صار خطأ من Gemini API. تأكد من المفتاح أو جرّب بعد قليل.';
+      return `❌ صار خطأ من Gemini API: ${data?.error?.message || 'غير معروف'}`;
     }
 
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || '❌ ما قدرت أطلع رد مناسب.';
