@@ -489,16 +489,23 @@ function createEmbed({
   footer = null,
   image = null,
   thumbnail = null,
-  color = '#0F9D9A'
+  color = '#0EA5E9'
 }) {
   const embed = new EmbedBuilder()
     .setColor(color)
+    .setAuthor({
+      name: 'Time Dosn • Premium System',
+      iconURL: client.user?.displayAvatarURL() || undefined
+    })
     .setTitle(title)
-    .setDescription(description || null)
-    .setTimestamp();
+    .setDescription(description || ' ')
+    .setTimestamp()
+    .setFooter({
+      text: footer || 'Time Dosn Bot • Dark Blue Edition',
+      iconURL: client.user?.displayAvatarURL() || undefined
+    });
 
   if (fields.length) embed.addFields(fields);
-  if (footer) embed.setFooter({ text: footer });
   if (image) embed.setImage(image);
   if (thumbnail) embed.setThumbnail(thumbnail);
 
@@ -817,20 +824,34 @@ async function askGroq({ userId, question, imageUrl = null }) {
 async function createZekrEmbed(selectedZekr = randomZekr()) {
   const globalTotal = await getGlobalTotal();
   const dailyTotal = await getDailyTotal();
+  const percent = Math.min(100, Math.floor((dailyTotal / DAILY_GOAL) * 100));
+  const progressBar =
+    '▰'.repeat(Math.floor(percent / 10)) +
+    '▱'.repeat(10 - Math.floor(percent / 10));
 
   return new EmbedBuilder()
-    .setColor('#0F9D9A')
-    .setAuthor({ name: 'نظام الأذكار' })
-    .setTitle('📿 ذكر')
-    .setDescription(`╭・${selectedZekr}\n╰・اذكر الله واطمئن قلبك`)
-    .addFields(
-      { name: 'الفضل', value: 'الذكر نور للقلب وطمأنينة للنفس', inline: false },
-      { name: 'تنبيه', value: 'أكثروا من الصلاة على النبي ﷺ', inline: false },
-      { name: 'العداد العام', value: String(globalTotal), inline: true },
-      { name: 'عداد اليوم', value: `${dailyTotal}/${DAILY_GOAL}`, inline: true },
-      { name: 'عدد الأذكار المتاحة', value: String(adhkar.length), inline: true }
+    .setColor('#0284C7')
+    .setAuthor({
+      name: 'Time Dosn • نظام الأذكار',
+      iconURL: client.user?.displayAvatarURL() || undefined
+    })
+    .setTitle('📿 ذكر اليوم')
+    .setDescription(
+      `> ﴿ أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ ﴾\n\n` +
+      `**${selectedZekr}**\n\n` +
+      `━━━━━━━━━━━━━━━━━━`
     )
-    .setFooter({ text: 'أذكار تلقائية • Discord Bot' })
+    .addFields(
+      { name: '✨ الفضل', value: 'الذكر نور للقلب وطمأنينة للنفس', inline: false },
+      { name: '🌍 العداد العام', value: `\`${globalTotal}\``, inline: true },
+      { name: '🎯 تحدي اليوم', value: `\`${dailyTotal}/${DAILY_GOAL}\``, inline: true },
+      { name: '📊 التقدم', value: `\`${progressBar}\` ${percent}%`, inline: false }
+    )
+    .setThumbnail(client.user?.displayAvatarURL() || null)
+    .setFooter({
+      text: 'Time Dosn Bot • أذكار تلقائية',
+      iconURL: client.user?.displayAvatarURL() || undefined
+    })
     .setTimestamp();
 }
 
