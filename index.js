@@ -834,7 +834,7 @@ client.on('interactionCreate', async (interaction) => {
             { name: 'المجموع الحالي', value: `${dailyTotal}`, inline: true },
             { name: 'نسبة الإنجاز', value: `${percent}%`, inline: true },
             { name: 'المتبقي', value: `${remaining}`, inline: true },
-            { name: 'الحالة', value: dailyTotal >= DAILY_GOAL ? '✅ تم تحقيق الهدف' : '⏳ مستمر', inline: true }
+            { name: 'الحالة', value: dailyTotal >= DAILY_GOAL ? '✅جزاك الله خير تم تحقيق الهدف' : '⏳ مستمر', inline: true }
           ],
           footer: 'Daily Challenge'
         })]
