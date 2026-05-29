@@ -411,95 +411,6 @@ a{color:#38bdf8;text-decoration:none}
     console.log(`🌐 Web server running on port ${PORT}`);
   });
 }
-  http.createServer(async (req, res) => {
-    try {
-      if (req.url.startsWith('/health')) {
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        return res.end('OK');
-      }
-
-      let stats = {
-        globalTotal: '0',
-        dailyTotal: '0',
-        usersCount: '0',
-        subscribersCount: '0',
-        memoryCount: '0'
-      };
-
-      try {
-        stats.globalTotal = await getStat('global_zekr_total', '0');
-        stats.dailyTotal = await getStat('daily_zekr_total', '0');
-
-        const usersResult = await pool.query('SELECT COUNT(*) FROM user_zekr_counts');
-        const subsResult = await pool.query('SELECT COUNT(*) FROM dm_subscribers WHERE subscribed = TRUE');
-        const memoryResult = await pool.query('SELECT COUNT(*) FROM ai_memory');
-
-        stats.usersCount = usersResult.rows[0].count;
-        stats.subscribersCount = subsResult.rows[0].count;
-        stats.memoryCount = memoryResult.rows[0].count;
-      } catch (_) {}
-
-      const botTag = client.user?.tag || 'Not logged in yet';
-      const uptime = Math.floor(process.uptime());
-
-      const html = `
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bot Dashboard</title>
-<style>
-body{margin:0;font-family:Tahoma,Arial;background:#111827;color:#fff}
-.container{max-width:1000px;margin:auto;padding:30px}
-.card{background:#1f2937;border:1px solid #374151;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
-.num{font-size:32px;font-weight:bold;color:#22c55e}
-h1{color:#e5e7eb}
-small{color:#9ca3af}
-.badge{display:inline-block;background:#065f46;padding:7px 12px;border-radius:999px}
-</style>
-</head>
-<body>
-<div class="container">
-<h1>🤖 لوحة تحكم البوت</h1>
-<p class="badge">الحالة: شغال</p>
-
-<div class="card">
-<h2>معلومات عامة</h2>
-<p>البوت: <b>${botTag}</b></p>
-<p>مدة التشغيل: <b>${uptime}</b> ثانية</p>
-<p>Render Port: <b>${PORT}</b></p>
-</div>
-
-<div class="grid">
-<div class="card"><small>العداد العام</small><div class="num">${stats.globalTotal}</div></div>
-<div class="card"><small>عداد اليوم</small><div class="num">${stats.dailyTotal}/${DAILY_GOAL}</div></div>
-<div class="card"><small>مستخدمين عندهم أذكار</small><div class="num">${stats.usersCount}</div></div>
-<div class="card"><small>مشتركين DM</small><div class="num">${stats.subscribersCount}</div></div>
-<div class="card"><small>رسائل ذاكرة AI</small><div class="num">${stats.memoryCount}</div></div>
-</div>
-
-<div class="card">
-<h2>الأوامر الجديدة</h2>
-<p><b>/ai</b> اسأل الذكاء أو ارفع صورة معه.</p>
-<p><b>/aiclear</b> يمسح ذاكرة الذكاء الخاصة فيك.</p>
-<p><b>/dashboard</b> يعطيك رابط هذه اللوحة.</p>
-</div>
-</div>
-</body>
-</html>`;
-
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(html);
-    } catch (error) {
-      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Dashboard Error');
-    }
-  }).listen(PORT, '0.0.0.0', () => {
-    console.log(`🌐 Web server running on port ${PORT}`);
-  });
-}
 
 function getTodayRiyadh() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -1329,19 +1240,14 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.commandName === 'dashboard') {
-  await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ ephemeral: true });
 
-  const dashboardUrl =
-    process.env.RENDER_EXTERNAL_URL ||
-    'https://discord-bot-5h8e.onrender.com';
+      const dashboardUrl =
+        process.env.RENDER_EXTERNAL_URL ||
+        'https://discord-bot-5h8e.onrender.com';
 
-  return await interaction.editReply({
-    content: `🌐 رابط لوحة الويب:\n${dashboardUrl}`
-  });
-}
-      return await interaction.reply({
-        content: `🌐 رابط لوحة الويب:\n${process.env.RENDER_EXTERNAL_URL || 'افتح رابط خدمة Render الأساسي'}`,
-        ephemeral: true
+      return await interaction.editReply({
+        content: `🌐 رابط لوحة الويب:\n${dashboardUrl}`
       });
     }
 
