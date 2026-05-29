@@ -112,7 +112,6 @@ const rankTiers = [
   { name: 'قدوة', min: 600 },
   { name: 'أسطورة الذكر', min: 1000 }
 ];
-
 function startDashboardServer() {
   http.createServer(async (req, res) => {
     try {
@@ -150,13 +149,14 @@ function startDashboardServer() {
       const guild = client.guilds.cache.first();
       const guildName = guild?.name || 'Discord Server';
       const memberCount = guild?.memberCount || 0;
+      const apiPing = Math.round(client.ws.ping || 0);
 
       const html = `
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Time Dosn Dashboard</title>
 <style>
 *{box-sizing:border-box}
@@ -164,239 +164,278 @@ body{
   margin:0;
   font-family:Tahoma,Arial,sans-serif;
   background:
-    radial-gradient(circle at 20% 10%, rgba(0,191,255,.20), transparent 35%),
-    radial-gradient(circle at 80% 0%, rgba(0,95,180,.25), transparent 35%),
-    linear-gradient(135deg,#020617,#061426 45%,#020617);
+    radial-gradient(circle at 18% 8%,rgba(0,195,255,.22),transparent 32%),
+    radial-gradient(circle at 85% 15%,rgba(0,80,255,.22),transparent 34%),
+    linear-gradient(135deg,#020617,#061526 45%,#020617);
   color:#eaf6ff;
   min-height:100vh;
 }
-.wrapper{
-  max-width:1250px;
-  margin:auto;
-  padding:28px;
-}
-.header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
+.layout{
+  display:grid;
+  grid-template-columns:270px 1fr;
   gap:18px;
-  padding:22px;
-  border:1px solid rgba(56,189,248,.35);
-  background:rgba(2,12,27,.72);
-  box-shadow:0 0 40px rgba(14,165,233,.15);
+  max-width:1500px;
+  margin:auto;
+  padding:20px;
+}
+.sidebar,.card,.hero,.panel{
+  background:rgba(3,12,28,.78);
+  border:1px solid rgba(56,189,248,.28);
   border-radius:24px;
+  box-shadow:0 0 45px rgba(14,165,233,.12);
   backdrop-filter:blur(14px);
+}
+.sidebar{
+  padding:22px;
+  position:sticky;
+  top:20px;
+  height:calc(100vh - 40px);
 }
 .brand{
   display:flex;
   align-items:center;
-  gap:16px;
+  gap:12px;
+  margin-bottom:28px;
 }
 .logo{
-  width:78px;
-  height:78px;
+  width:64px;
+  height:64px;
   border-radius:50%;
   border:2px solid #38bdf8;
-  box-shadow:0 0 25px rgba(56,189,248,.55);
+  box-shadow:0 0 28px rgba(56,189,248,.55);
 }
-h1,h2,p{margin:0}
-.muted{color:#9cc8df}
-.badge{
-  display:inline-flex;
+.nav{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.nav div{
+  padding:14px 16px;
+  border-radius:16px;
+  color:#bfeaff;
+  background:rgba(14,165,233,.05);
+  border:1px solid transparent;
+}
+.nav div.active,.nav div:hover{
+  background:linear-gradient(90deg,#0284c7,#0ea5e9);
+  color:white;
+  box-shadow:0 0 25px rgba(14,165,233,.38);
+}
+.main{display:flex;flex-direction:column;gap:18px}
+.hero{
+  padding:26px;
+  display:flex;
   align-items:center;
-  gap:8px;
-  background:rgba(34,197,94,.15);
+  justify-content:space-between;
+  gap:20px;
+}
+.botbox{
+  display:flex;
+  align-items:center;
+  gap:18px;
+}
+.avatar{
+  width:110px;
+  height:110px;
+  border-radius:50%;
+  border:3px solid #0ea5e9;
+  box-shadow:0 0 35px rgba(14,165,233,.55);
+}
+.status{
+  display:inline-block;
+  margin-top:8px;
   color:#22c55e;
-  border:1px solid rgba(34,197,94,.35);
-  padding:9px 14px;
-  border-radius:999px;
   font-weight:bold;
 }
-.grid{
+.muted{color:#9cc8df}
+h1,h2,h3,p{margin:0}
+.stats{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
   gap:16px;
-  margin-top:18px;
 }
 .card{
-  border:1px solid rgba(56,189,248,.28);
-  background:linear-gradient(180deg,rgba(8,27,50,.86),rgba(3,10,24,.86));
-  border-radius:22px;
   padding:20px;
-  box-shadow:0 12px 35px rgba(0,0,0,.35), inset 0 0 25px rgba(14,165,233,.04);
-}
-.card:hover{
-  border-color:rgba(125,211,252,.65);
-  box-shadow:0 0 35px rgba(14,165,233,.20);
+  min-height:135px;
 }
 .icon{
-  font-size:28px;
-  margin-bottom:10px;
-  color:#38bdf8;
+  font-size:30px;
+  margin-bottom:12px;
 }
 .num{
   font-size:34px;
   font-weight:900;
-  color:#ffffff;
   margin-top:10px;
-  text-shadow:0 0 14px rgba(56,189,248,.4);
+  color:#fff;
+  text-shadow:0 0 16px rgba(56,189,248,.45);
 }
 .section{
-  margin-top:18px;
   display:grid;
   grid-template-columns:1.2fr .8fr;
-  gap:16px;
+  gap:18px;
 }
-@media(max-width:850px){
-  .section{grid-template-columns:1fr}
-  .header{flex-direction:column;align-items:flex-start}
+.panel{padding:22px}
+.systems{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:14px;
+  margin-top:16px;
 }
-.list{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  margin-top:14px;
+.sys{
+  padding:18px;
+  border-radius:18px;
+  border:1px solid rgba(56,189,248,.18);
+  background:rgba(14,165,233,.07);
 }
-.row{
-  display:flex;
-  justify-content:space-between;
-  gap:12px;
-  align-items:center;
-  padding:13px 14px;
-  border-radius:15px;
-  background:rgba(14,165,233,.08);
-  border:1px solid rgba(56,189,248,.13);
-}
+.ok{color:#22c55e;font-weight:bold}
 .commands{
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
-  gap:12px;
-  margin-top:14px;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:14px;
+  margin-top:16px;
+}
+.cmdcat{
+  border-radius:18px;
+  padding:16px;
+  border:1px solid rgba(56,189,248,.18);
+  background:rgba(14,165,233,.07);
 }
 .cmd{
-  text-align:center;
-  padding:14px;
-  border-radius:16px;
-  background:rgba(14,165,233,.09);
-  border:1px solid rgba(56,189,248,.17);
-  color:#dff6ff;
-  font-weight:bold;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,.06);
 }
-.notice{
-  margin-top:18px;
-  padding:16px;
-  border-radius:18px;
-  background:rgba(14,165,233,.09);
-  border:1px dashed rgba(125,211,252,.35);
-  color:#bfeaff;
+.cmd:last-child{border-bottom:none}
+.code{
+  color:#38bdf8;
+  font-weight:bold;
 }
 .footer{
   text-align:center;
-  margin:24px 0 5px;
   color:#7aaac2;
+  padding:12px;
 }
-a{color:#38bdf8;text-decoration:none}
+@media(max-width:950px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:relative;height:auto}
+  .section{grid-template-columns:1fr}
+  .hero{flex-direction:column;align-items:flex-start}
+}
 </style>
 </head>
 <body>
-<div class="wrapper">
 
-  <div class="header">
+<div class="layout">
+
+  <aside class="sidebar">
     <div class="brand">
-      ${botAvatar ? `<img class="logo" src="${botAvatar}" />` : `<div class="logo"></div>`}
+      ${botAvatar ? `<img class="logo" src="${botAvatar}">` : `<div class="logo"></div>`}
       <div>
-        <h1>Time Dosn Dashboard</h1>
-        <p class="muted">لوحة عامة لعرض حالة البوت وإحصائياته</p>
-      </div>
-    </div>
-    <div>
-      <span class="badge">● البوت شغال</span>
-      <p class="muted" style="margin-top:10px">Read Only • عرض فقط</p>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="icon">📿</div>
-      <p class="muted">العداد العام</p>
-      <div class="num">${stats.globalTotal}</div>
-    </div>
-
-    <div class="card">
-      <div class="icon">🎯</div>
-      <p class="muted">تحدي اليوم</p>
-      <div class="num">${stats.dailyTotal}/${DAILY_GOAL}</div>
-    </div>
-
-    <div class="card">
-      <div class="icon">👥</div>
-      <p class="muted">أعضاء السيرفر</p>
-      <div class="num">${memberCount}</div>
-    </div>
-
-    <div class="card">
-      <div class="icon">✉️</div>
-      <p class="muted">مشتركي الرسائل الخاصة</p>
-      <div class="num">${stats.subscribersCount}</div>
-    </div>
-
-    <div class="card">
-      <div class="icon">🧠</div>
-      <p class="muted">ذاكرة الذكاء</p>
-      <div class="num">${stats.memoryCount}</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="card">
-      <h2>🤖 معلومات البوت</h2>
-      <div class="list">
-        <div class="row"><span>اسم البوت</span><b>${botTag}</b></div>
-        <div class="row"><span>السيرفر</span><b>${guildName}</b></div>
-        <div class="row"><span>مدة التشغيل</span><b>${uptimeHours} ساعة و ${uptimeMinutes} دقيقة</b></div>
-        <div class="row"><span>الحالة</span><b style="color:#22c55e">متصل</b></div>
+        <h2>Time Dosn</h2>
+        <p class="muted">Discord Bot</p>
       </div>
     </div>
 
-    <div class="card">
-      <h2>⚡ مميزات مفعلة</h2>
-      <div class="list">
-        <div class="row"><span>الأذكار</span><b>✅</b></div>
-        <div class="row"><span>قاعدة البيانات</span><b>✅</b></div>
-        <div class="row"><span>الذكاء الاصطناعي</span><b>✅</b></div>
-        <div class="row"><span>قراءة الصور</span><b>✅</b></div>
-        <div class="row"><span>لوحة عامة</span><b>✅</b></div>
+    <div class="nav">
+      <div class="active">🏠 الرئيسية</div>
+      <div>💓 حالة البوت</div>
+      <div>📋 الأوامر</div>
+      <div>📿 الأذكار</div>
+      <div>🧠 الذكاء الاصطناعي</div>
+      <div>👥 الأعضاء</div>
+      <div>📊 الإحصائيات</div>
+      <div>🔒 عرض فقط</div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <section class="hero">
+      <div class="botbox">
+        ${botAvatar ? `<img class="avatar" src="${botAvatar}">` : `<div class="avatar"></div>`}
+        <div>
+          <h1>${botTag}</h1>
+          <p class="muted">بوت ديسكورد متعدد الوظائف مع الأذكار والذكاء الاصطناعي</p>
+          <span class="status">● Online</span>
+        </div>
       </div>
-    </div>
-  </div>
+      <div class="card" style="min-width:260px">
+        <p class="muted">السيرفر</p>
+        <h2>${guildName}</h2>
+        <p class="muted" style="margin-top:10px">مدة التشغيل: ${uptimeHours} ساعة و ${uptimeMinutes} دقيقة</p>
+      </div>
+    </section>
 
-  <div class="card" style="margin-top:18px">
-    <h2>🧩 أوامر البوت</h2>
-    <div class="commands">
-      <div class="cmd">/ai</div>
-      <div class="cmd">/aiclear</div>
-      <div class="cmd">/zekr</div>
-      <div class="cmd">/rank</div>
-      <div class="cmd">/top</div>
-      <div class="cmd">/challenge</div>
-      <div class="cmd">/quran</div>
-      <div class="cmd">/avatar</div>
-      <div class="cmd">/userinfo</div>
-      <div class="cmd">/server</div>
-      <div class="cmd">/suggest</div>
-      <div class="cmd">/dashboard</div>
-    </div>
+    <section class="stats">
+      <div class="card"><div class="icon">📿</div><p class="muted">إجمالي الأذكار</p><div class="num">${stats.globalTotal}</div></div>
+      <div class="card"><div class="icon">🎯</div><p class="muted">تحدي اليوم</p><div class="num">${stats.dailyTotal}/${DAILY_GOAL}</div></div>
+      <div class="card"><div class="icon">👥</div><p class="muted">أعضاء السيرفر</p><div class="num">${memberCount}</div></div>
+      <div class="card"><div class="icon">✉️</div><p class="muted">مشتركين DM</p><div class="num">${stats.subscribersCount}</div></div>
+      <div class="card"><div class="icon">🧠</div><p class="muted">ذاكرة AI</p><div class="num">${stats.memoryCount}</div></div>
+    </section>
 
-    <div class="notice">
-      هذه اللوحة للعرض فقط. لا تحتوي على أزرار تعديل أو تحكم، ولا تعرض أي مفاتيح سرية أو بيانات حساسة.
-    </div>
-  </div>
+    <section class="section">
+      <div class="panel">
+        <h2>💓 حالة الأنظمة</h2>
+        <div class="systems">
+          <div class="sys"><h3>🧠 الذكاء الاصطناعي</h3><p class="ok">يعمل</p><p class="muted">Groq AI + Vision</p></div>
+          <div class="sys"><h3>💾 قاعدة البيانات</h3><p class="ok">متصلة</p><p class="muted">PostgreSQL</p></div>
+          <div class="sys"><h3>🎧 النظام الصوتي</h3><p class="ok">جاهز</p><p class="muted">Quran Voice</p></div>
+          <div class="sys"><h3>⚡ Ping</h3><p class="ok">${apiPing}ms</p><p class="muted">Discord Gateway</p></div>
+        </div>
+      </div>
 
-  <div class="footer">
-    © Time Dosn Bot • Dark Blue & Cyan Dashboard
-  </div>
+      <div class="panel">
+        <h2>🔐 أمان اللوحة</h2>
+        <div class="systems">
+          <div class="sys"><h3>عرض فقط</h3><p class="ok">آمن</p><p class="muted">لا يوجد تعديل أو حذف</p></div>
+          <div class="sys"><h3>الأسرار</h3><p class="ok">مخفية</p><p class="muted">لا تظهر التوكنات أو المفاتيح</p></div>
+        </div>
+      </div>
+    </section>
 
+    <section class="panel">
+      <h2>📋 صفحة الأوامر</h2>
+      <div class="commands">
+        <div class="cmdcat">
+          <h3>🤖 الذكاء</h3>
+          <div class="cmd"><span class="code">/ai</span><span>اسأل الذكاء</span></div>
+          <div class="cmd"><span class="code">/aiclear</span><span>مسح الذاكرة</span></div>
+        </div>
+
+        <div class="cmdcat">
+          <h3>📿 الأذكار</h3>
+          <div class="cmd"><span class="code">/zekr</span><span>ذكر عشوائي</span></div>
+          <div class="cmd"><span class="code">/rank</span><span>رتبتك</span></div>
+          <div class="cmd"><span class="code">/top</span><span>المتصدرين</span></div>
+          <div class="cmd"><span class="code">/challenge</span><span>تحدي اليوم</span></div>
+        </div>
+
+        <div class="cmdcat">
+          <h3>🎧 الصوت</h3>
+          <div class="cmd"><span class="code">/join</span><span>دخول الروم</span></div>
+          <div class="cmd"><span class="code">/quran</span><span>تشغيل القرآن</span></div>
+          <div class="cmd"><span class="code">/stopquran</span><span>إيقاف</span></div>
+          <div class="cmd"><span class="code">/leave</span><span>خروج</span></div>
+        </div>
+
+        <div class="cmdcat">
+          <h3>👤 معلومات</h3>
+          <div class="cmd"><span class="code">/avatar</span><span>صورة العضو</span></div>
+          <div class="cmd"><span class="code">/userinfo</span><span>معلومات عضو</span></div>
+          <div class="cmd"><span class="code">/server</span><span>معلومات السيرفر</span></div>
+          <div class="cmd"><span class="code">/dashboard</span><span>رابط اللوحة</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">© Time Dosn Bot • Dark Blue & Cyan Dashboard • Read Only</div>
+
+  </main>
 </div>
+
 </body>
 </html>`;
 
