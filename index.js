@@ -172,41 +172,45 @@ function createEmbed({
   return embed;
 }
 
-async function askGemini(question) {
-  if (!process.env.GEMINI_API_KEY) {
-    return '❌ مفتاح GEMINI_API_KEY غير موجود في Render Environment.';
+async function askGroq(question) {
+  if (!process.env.GROQ_API_KEY) {
+    return '❌ مفتاح GROQ_API_KEY غير موجود في Render Environment.';
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `أجب باللغة العربية بشكل واضح ومختصر ومفيد:\n\n${question}`
-                }
-              ]
-            }
-          ]
-        })
-      }
-    );
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: 'أنت مساعد ذكي داخل سيرفر ديسكورد. أجب بالعربية بشكل واضح ومختصر ومفيد.'
+          },
+          {
+            role: 'user',
+            content: question
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 800
+      })
+    });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('❌ Gemini API Error:', data);
-      return `❌ صار خطأ من Gemini API: ${data?.error?.message || 'غير معروف'}`;
+      console.error('❌ Groq API Error:', data);
+      return `❌ صار خطأ من Groq API: ${data?.error?.message || 'غير معروف'}`;
     }
 
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '❌ ما قدرت أطلع رد مناسب.';
+    return data?.choices?.[0]?.message?.content || '❌ ما قدرت أطلع رد مناسب.';
   } catch (error) {
-    console.error('❌ خطأ في askGemini:', error);
+    console.error('❌ خطأ في askGroq:', error);
     return '❌ صار خطأ أثناء الاتصال بالذكاء الاصطناعي.';
   }
 }
@@ -810,7 +814,7 @@ client.on('interactionCreate', async (interaction) => {
       await interaction.deferReply();
 
       const question = interaction.options.getString('question');
-      const answer = await askGemini(question);
+     const answer = await askGroq(question);
 
       return await interaction.editReply({
         embeds: [createEmbed({
@@ -819,7 +823,7 @@ client.on('interactionCreate', async (interaction) => {
           fields: [
             { name: 'سؤالك', value: question.slice(0, 1000), inline: false }
           ],
-          footer: 'Gemini AI'
+          footer: 'Groq AI'
         })]
       });
     }
