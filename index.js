@@ -112,344 +112,6 @@ const rankTiers = [
   { name: 'قدوة', min: 600 },
   { name: 'أسطورة الذكر', min: 1000 }
 ];
-function startDashboardServer() {
-  http.createServer(async (req, res) => {
-    try {
-      if (req.url.startsWith('/health')) {
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        return res.end('OK');
-      }
-
-      let stats = {
-        globalTotal: '0',
-        dailyTotal: '0',
-        usersCount: '0',
-        subscribersCount: '0',
-        memoryCount: '0'
-      };
-
-      try {
-        stats.globalTotal = await getStat('global_zekr_total', '0');
-        stats.dailyTotal = await getStat('daily_zekr_total', '0');
-
-        const usersResult = await pool.query('SELECT COUNT(*) FROM user_zekr_counts');
-        const subsResult = await pool.query('SELECT COUNT(*) FROM dm_subscribers WHERE subscribed = TRUE');
-        const memoryResult = await pool.query('SELECT COUNT(*) FROM ai_memory');
-
-        stats.usersCount = usersResult.rows[0].count;
-        stats.subscribersCount = subsResult.rows[0].count;
-        stats.memoryCount = memoryResult.rows[0].count;
-      } catch (_) {}
-
-      const botTag = client.user?.tag || 'Not logged in yet';
-      const botAvatar = client.user?.displayAvatarURL?.({ size: 256 }) || '';
-      const uptime = Math.floor(process.uptime());
-      const uptimeHours = Math.floor(uptime / 3600);
-      const uptimeMinutes = Math.floor((uptime % 3600) / 60);
-      const guild = client.guilds.cache.first();
-      const guildName = guild?.name || 'Discord Server';
-      const memberCount = guild?.memberCount || 0;
-      const apiPing = Math.round(client.ws.ping || 0);
-
-      const html = `
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Time Dosn Dashboard</title>
-<style>
-*{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:Tahoma,Arial,sans-serif;
-  background:
-    radial-gradient(circle at 18% 8%,rgba(0,195,255,.22),transparent 32%),
-    radial-gradient(circle at 85% 15%,rgba(0,80,255,.22),transparent 34%),
-    linear-gradient(135deg,#020617,#061526 45%,#020617);
-  color:#eaf6ff;
-  min-height:100vh;
-}
-.layout{
-  display:grid;
-  grid-template-columns:270px 1fr;
-  gap:18px;
-  max-width:1500px;
-  margin:auto;
-  padding:20px;
-}
-.sidebar,.card,.hero,.panel{
-  background:rgba(3,12,28,.78);
-  border:1px solid rgba(56,189,248,.28);
-  border-radius:24px;
-  box-shadow:0 0 45px rgba(14,165,233,.12);
-  backdrop-filter:blur(14px);
-}
-.sidebar{
-  padding:22px;
-  position:sticky;
-  top:20px;
-  height:calc(100vh - 40px);
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin-bottom:28px;
-}
-.logo{
-  width:64px;
-  height:64px;
-  border-radius:50%;
-  border:2px solid #38bdf8;
-  box-shadow:0 0 28px rgba(56,189,248,.55);
-}
-.nav{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-.nav div{
-  padding:14px 16px;
-  border-radius:16px;
-  color:#bfeaff;
-  background:rgba(14,165,233,.05);
-  border:1px solid transparent;
-}
-.nav div.active,.nav div:hover{
-  background:linear-gradient(90deg,#0284c7,#0ea5e9);
-  color:white;
-  box-shadow:0 0 25px rgba(14,165,233,.38);
-}
-.main{display:flex;flex-direction:column;gap:18px}
-.hero{
-  padding:26px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:20px;
-}
-.botbox{
-  display:flex;
-  align-items:center;
-  gap:18px;
-}
-.avatar{
-  width:110px;
-  height:110px;
-  border-radius:50%;
-  border:3px solid #0ea5e9;
-  box-shadow:0 0 35px rgba(14,165,233,.55);
-}
-.status{
-  display:inline-block;
-  margin-top:8px;
-  color:#22c55e;
-  font-weight:bold;
-}
-.muted{color:#9cc8df}
-h1,h2,h3,p{margin:0}
-.stats{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
-  gap:16px;
-}
-.card{
-  padding:20px;
-  min-height:135px;
-}
-.icon{
-  font-size:30px;
-  margin-bottom:12px;
-}
-.num{
-  font-size:34px;
-  font-weight:900;
-  margin-top:10px;
-  color:#fff;
-  text-shadow:0 0 16px rgba(56,189,248,.45);
-}
-.section{
-  display:grid;
-  grid-template-columns:1.2fr .8fr;
-  gap:18px;
-}
-.panel{padding:22px}
-.systems{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:14px;
-  margin-top:16px;
-}
-.sys{
-  padding:18px;
-  border-radius:18px;
-  border:1px solid rgba(56,189,248,.18);
-  background:rgba(14,165,233,.07);
-}
-.ok{color:#22c55e;font-weight:bold}
-.commands{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:14px;
-  margin-top:16px;
-}
-.cmdcat{
-  border-radius:18px;
-  padding:16px;
-  border:1px solid rgba(56,189,248,.18);
-  background:rgba(14,165,233,.07);
-}
-.cmd{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:10px 0;
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-.cmd:last-child{border-bottom:none}
-.code{
-  color:#38bdf8;
-  font-weight:bold;
-}
-.footer{
-  text-align:center;
-  color:#7aaac2;
-  padding:12px;
-}
-@media(max-width:950px){
-  .layout{grid-template-columns:1fr}
-  .sidebar{position:relative;height:auto}
-  .section{grid-template-columns:1fr}
-  .hero{flex-direction:column;align-items:flex-start}
-}
-</style>
-</head>
-<body>
-
-<div class="layout">
-
-  <aside class="sidebar">
-    <div class="brand">
-      ${botAvatar ? `<img class="logo" src="${botAvatar}">` : `<div class="logo"></div>`}
-      <div>
-        <h2>Time Dosn</h2>
-        <p class="muted">Discord Bot</p>
-      </div>
-    </div>
-
-    <div class="nav">
-      <div class="active">🏠 الرئيسية</div>
-      <div>💓 حالة البوت</div>
-      <div>📋 الأوامر</div>
-      <div>📿 الأذكار</div>
-      <div>🧠 الذكاء الاصطناعي</div>
-      <div>👥 الأعضاء</div>
-      <div>📊 الإحصائيات</div>
-      <div>🔒 عرض فقط</div>
-    </div>
-  </aside>
-
-  <main class="main">
-
-    <section class="hero">
-      <div class="botbox">
-        ${botAvatar ? `<img class="avatar" src="${botAvatar}">` : `<div class="avatar"></div>`}
-        <div>
-          <h1>${botTag}</h1>
-          <p class="muted">بوت ديسكورد متعدد الوظائف مع الأذكار والذكاء الاصطناعي</p>
-          <span class="status">● Online</span>
-        </div>
-      </div>
-      <div class="card" style="min-width:260px">
-        <p class="muted">السيرفر</p>
-        <h2>${guildName}</h2>
-        <p class="muted" style="margin-top:10px">مدة التشغيل: ${uptimeHours} ساعة و ${uptimeMinutes} دقيقة</p>
-      </div>
-    </section>
-
-    <section class="stats">
-      <div class="card"><div class="icon">📿</div><p class="muted">إجمالي الأذكار</p><div class="num">${stats.globalTotal}</div></div>
-      <div class="card"><div class="icon">🎯</div><p class="muted">تحدي اليوم</p><div class="num">${stats.dailyTotal}/${DAILY_GOAL}</div></div>
-      <div class="card"><div class="icon">👥</div><p class="muted">أعضاء السيرفر</p><div class="num">${memberCount}</div></div>
-      <div class="card"><div class="icon">✉️</div><p class="muted">مشتركين DM</p><div class="num">${stats.subscribersCount}</div></div>
-      <div class="card"><div class="icon">🧠</div><p class="muted">ذاكرة AI</p><div class="num">${stats.memoryCount}</div></div>
-    </section>
-
-    <section class="section">
-      <div class="panel">
-        <h2>💓 حالة الأنظمة</h2>
-        <div class="systems">
-          <div class="sys"><h3>🧠 الذكاء الاصطناعي</h3><p class="ok">يعمل</p><p class="muted">Groq AI + Vision</p></div>
-          <div class="sys"><h3>💾 قاعدة البيانات</h3><p class="ok">متصلة</p><p class="muted">PostgreSQL</p></div>
-          <div class="sys"><h3>🎧 النظام الصوتي</h3><p class="ok">جاهز</p><p class="muted">Quran Voice</p></div>
-          <div class="sys"><h3>⚡ Ping</h3><p class="ok">${apiPing}ms</p><p class="muted">Discord Gateway</p></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>🔐 أمان اللوحة</h2>
-        <div class="systems">
-          <div class="sys"><h3>عرض فقط</h3><p class="ok">آمن</p><p class="muted">لا يوجد تعديل أو حذف</p></div>
-          <div class="sys"><h3>الأسرار</h3><p class="ok">مخفية</p><p class="muted">لا تظهر التوكنات أو المفاتيح</p></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2>📋 صفحة الأوامر</h2>
-      <div class="commands">
-        <div class="cmdcat">
-          <h3>🤖 الذكاء</h3>
-          <div class="cmd"><span class="code">/ai</span><span>اسأل الذكاء</span></div>
-          <div class="cmd"><span class="code">/aiclear</span><span>مسح الذاكرة</span></div>
-        </div>
-
-        <div class="cmdcat">
-          <h3>📿 الأذكار</h3>
-          <div class="cmd"><span class="code">/zekr</span><span>ذكر عشوائي</span></div>
-          <div class="cmd"><span class="code">/rank</span><span>رتبتك</span></div>
-          <div class="cmd"><span class="code">/top</span><span>المتصدرين</span></div>
-          <div class="cmd"><span class="code">/challenge</span><span>تحدي اليوم</span></div>
-        </div>
-
-        <div class="cmdcat">
-          <h3>🎧 الصوت</h3>
-          <div class="cmd"><span class="code">/join</span><span>دخول الروم</span></div>
-          <div class="cmd"><span class="code">/quran</span><span>تشغيل القرآن</span></div>
-          <div class="cmd"><span class="code">/stopquran</span><span>إيقاف</span></div>
-          <div class="cmd"><span class="code">/leave</span><span>خروج</span></div>
-        </div>
-
-        <div class="cmdcat">
-          <h3>👤 معلومات</h3>
-          <div class="cmd"><span class="code">/avatar</span><span>صورة العضو</span></div>
-          <div class="cmd"><span class="code">/userinfo</span><span>معلومات عضو</span></div>
-          <div class="cmd"><span class="code">/server</span><span>معلومات السيرفر</span></div>
-          <div class="cmd"><span class="code">/dashboard</span><span>رابط اللوحة</span></div>
-        </div>
-      </div>
-    </section>
-
-    <div class="footer">© Time Dosn Bot • Dark Blue & Cyan Dashboard • Read Only</div>
-
-  </main>
-</div>
-
-</body>
-</html>`;
-
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(html);
-    } catch (error) {
-      console.error('Dashboard Error:', error);
-      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Dashboard Error');
-    }
-  }).listen(PORT, '0.0.0.0', () => {
-    console.log(`🌐 Web server running on port ${PORT}`);
-  });
-}
 
 function getTodayRiyadh() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -1300,16 +962,28 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.commandName === 'dashboard') {
-      await interaction.deferReply({ ephemeral: true });
+  const embed = new EmbedBuilder()
+    .setColor('#0F9D9A')
+    .setTitle('🌐 Time Dosn System')
+    .setDescription('اضغط الزر بالأسفل لفتح لوحة التحكم الجديدة.')
+    .setThumbnail(client.user.displayAvatarURL())
+    .setFooter({ text: 'Time Dosn System • Dashboard' })
+    .setTimestamp();
 
-      const dashboardUrl =
-        process.env.RENDER_EXTERNAL_URL ||
-        'https://discord-bot-5h8e.onrender.com';
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('فتح لوحة التحكم')
+      .setEmoji('🌐')
+      .setStyle(ButtonStyle.Link)
+      .setURL('https://time-dosn-system.vercel.app')
+  );
 
-      return await interaction.editReply({
-        content: `🌐 رابط لوحة الويب:\n${dashboardUrl}`
-      });
-    }
+  return await interaction.reply({
+    embeds: [embed],
+    components: [row],
+    ephemeral: true
+  });
+}
 
     if (interaction.commandName === 'zekr') {
       await interaction.deferReply();
@@ -1623,5 +1297,5 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-startDashboardServer();
+
 client.login(process.env.TOKEN);
