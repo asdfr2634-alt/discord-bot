@@ -1297,5 +1297,5 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-
+startDashboardServer();
 client.login(process.env.TOKEN);
